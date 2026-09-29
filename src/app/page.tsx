@@ -1,104 +1,11 @@
-import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { PresenceChart } from "@/components/presence-chart";
+import { Button, FairInsight, FilterBar, MetricCard, MiniStat, ProgressBar, SectionCard, StatusBadge } from "@/components/ui";
+import { Icon } from "@/components/icons";
+import { queryPerformance } from "@/data/demo-data";
 
-const metrics = [
-  { label: "Mention rate", value: "—", helper: "No monitoring runs yet" },
-  { label: "Top recommendation rate", value: "—", helper: "No monitoring runs yet" },
-  { label: "Factual accuracy", value: "—", helper: "Add verified facts first" },
-];
-
-const steps = [
-  {
-    number: "01",
-    title: "Add verified facts",
-    description: "Build a reliable source of truth for the demo business.",
-    href: "/truth-hub",
-    action: "Open Truth Hub",
-  },
-  {
-    number: "02",
-    title: "Prepare search queries",
-    description: "Create realistic questions for different intents and audiences.",
-    href: "/queries",
-    action: "View Queries",
-  },
-  {
-    number: "03",
-    title: "Run monitoring",
-    description: "Measure visibility and compare AI claims with verified facts.",
-    href: "/monitoring",
-    action: "View Monitoring",
-  },
-];
-
-export default function DashboardPage() {
-  return (
-    <div>
-      <PageHeader
-        eyebrow="Overview"
-        title="Dashboard"
-        description="Track how your business appears in AI-powered search and recommendations."
-      />
-
-      <section aria-labelledby="metrics-heading" className="mt-8">
-        <h2 id="metrics-heading" className="sr-only">
-          Key metrics
-        </h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          {metrics.map((metric) => (
-            <article
-              key={metric.label}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
-              <p className="text-sm font-medium text-slate-600">{metric.label}</p>
-              <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900">
-                {metric.value}
-              </p>
-              <p className="mt-2 text-sm text-slate-500">{metric.helper}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section
-        aria-labelledby="getting-started-heading"
-        className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      >
-        <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
-            Competition prototype
-          </p>
-          <h2
-            id="getting-started-heading"
-            className="mt-2 text-xl font-semibold text-slate-900"
-          >
-            Start with the monitoring loop
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            The foundation is ready. These steps show where verified business data,
-            AI queries, and measured results will connect next.
-          </p>
-        </div>
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-3">
-          {steps.map((step) => (
-            <article
-              key={step.number}
-              className="flex min-h-52 flex-col rounded-xl bg-slate-50 p-5"
-            >
-              <span className="text-sm font-semibold text-teal-700">{step.number}</span>
-              <h3 className="mt-4 font-semibold text-slate-900">{step.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">{step.description}</p>
-              <Link
-                href={step.href}
-                className="mt-auto pt-5 text-sm font-semibold text-slate-900 transition-colors hover:text-teal-700"
-              >
-                {step.action} <span aria-hidden="true">→</span>
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
+export default function OverviewPage() { return <><PageHeader title="Overview" description="Your AI presence, truth accuracy, and highest-priority actions." action={<Button><Icon name="play"/>Run AI Scan</Button>}/><FilterBar/><main className="space-y-5 bg-[#f8fafc] p-5 lg:p-7">
+  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="AI Presence" value="74%" icon="pulse"><span className="font-semibold text-slate-700">71 AI mentions</span> · 38% top recommendation</MetricCard><MetricCard label="Fact Accuracy" value="91%" icon="shield"><span className="font-semibold text-slate-700">47 claims checked</span> · 42 verified</MetricCard><MetricCard label="Active Issues" value="5" icon="alert"><span className="font-semibold text-amber-700">4 conflicts</span> · 1 needs review</MetricCard><MetricCard label="Competitive Presence" value="28%" icon="users"><span className="font-semibold text-slate-700">2.3 avg. position</span> · 4 competitors</MetricCard></div>
+  <div className="grid gap-5 xl:grid-cols-[1.45fr_1fr]"><SectionCard title="AI Presence Trend" description="Mention rate across your benchmark query set" action={<span className="text-sm font-semibold text-green-700">+8.4% <span className="font-normal text-slate-400">this month</span></span>}><PresenceChart/></SectionCard><SectionCard title="Truth Monitor" description="Verified truth compared with current AI representation" action={<span className="text-2xl font-semibold text-slate-950">91% <span className="text-xs font-normal text-slate-400">accurate</span></span>}><div className="grid grid-cols-3 gap-3 border-b border-slate-100 px-5 py-4"><MiniStat label="Verified" value="42" tone="green"/><MiniStat label="Conflicts" value="4" tone="amber"/><MiniStat label="Needs review" value="1" tone="blue"/></div><div className="p-5"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Example issue</p><h3 className="mt-1 text-base font-semibold text-slate-950">Closing Time</h3></div><StatusBadge state="fragmented"/></div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg bg-green-50 p-3"><p className="text-[10px] font-bold uppercase text-green-700">Verified truth</p><p className="mt-1 font-semibold text-slate-900">11:00 PM</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-[10px] font-bold uppercase text-amber-700">AI response</p><p className="mt-1 font-semibold text-slate-900">9:00 PM</p></div></div><p className="mt-3 text-xs text-slate-500">Conflicting source: <span className="font-medium text-slate-700">old_menu.pdf — 9:00 PM</span></p><div className="mt-4 flex items-center justify-between"><span className="text-xs text-slate-500">Confidence: <strong className="text-slate-700">High</strong></span><Button variant="secondary">Investigate</Button></div></div></SectionCard></div>
+  <div className="grid gap-5 xl:grid-cols-[1fr_2fr]"><FairInsight observation="Your business is highly visible for late-night searches, but visibility among budget-focused customers declined." evidence="82% → 64% mention rate across 15 benchmark queries." action="Review value-focused messaging across current business sources."/><SectionCard title="Query Performance" description="Visibility and accuracy by benchmark category" action={<Button variant="quiet">View all queries <Icon name="arrow"/></Button>}><div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Query category</th><th>Tested</th><th>Visibility</th><th>Accuracy</th><th>Avg. position</th></tr></thead><tbody>{queryPerformance.map(row => <tr key={row.category}><td><span className="inline-flex items-center gap-2 font-semibold text-slate-800"><Icon name="chevron" className="size-3 text-slate-400"/>{row.category}</span></td><td>{row.tested}</td><td><div className="flex min-w-28 items-center gap-2"><ProgressBar value={row.visibility}/><span className="w-8 text-xs font-semibold">{row.visibility}%</span></div></td><td className="font-medium text-green-700">{row.accuracy}%</td><td>#{row.position}</td></tr>)}</tbody></table></div></SectionCard></div>
+</main></>; }

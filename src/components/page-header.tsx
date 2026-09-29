@@ -1,21 +1,4 @@
-type PageHeaderProps = {
-  eyebrow?: string;
-  title: string;
-  description: string;
-};
-
-export function PageHeader({ eyebrow, title, description }: PageHeaderProps) {
-  return (
-    <header className="max-w-3xl">
-      {eyebrow ? (
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
-          {eyebrow}
-        </p>
-      ) : null}
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-        {title}
-      </h1>
-      <p className="mt-3 text-base leading-7 text-slate-600">{description}</p>
-    </header>
-  );
+import type { ReactNode } from "react";
+export function PageHeader({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+  return <header className="flex flex-col justify-between gap-4 px-5 py-5 sm:flex-row sm:items-center lg:px-7"><div><h1 className="text-2xl font-semibold tracking-[-0.025em] text-slate-950">{title}</h1>{description && <p className="mt-1.5 text-sm text-slate-500">{description}</p>}</div>{action && <div className="shrink-0">{action}</div>}</header>;
 }

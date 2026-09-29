@@ -1,60 +1,18 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Navigation } from "@/components/navigation";
+import { Icon } from "@/components/icons";
 
-type AppShellProps = {
-  children: ReactNode;
-};
-
-export function AppShell({ children }: AppShellProps) {
-  return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
-      <aside className="border-b border-slate-200 bg-slate-950 text-white lg:fixed lg:inset-y-0 lg:w-[248px] lg:border-b-0 lg:border-r lg:border-slate-800">
-        <div className="flex h-full flex-col">
-          <div className="flex h-20 items-center justify-between px-5 lg:justify-start">
-            <Link href="/" className="flex items-center gap-3" aria-label="FAIR dashboard">
-              <span className="grid size-9 place-items-center rounded-xl bg-teal-400 font-bold text-slate-950">
-                F
-              </span>
-              <span>
-                <span className="block text-sm font-semibold tracking-wide">FAIR</span>
-                <span className="block text-xs text-slate-400">AI visibility</span>
-              </span>
-            </Link>
-            <span className="rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-medium text-teal-200 lg:hidden">
-              Demo Business
-            </span>
-          </div>
-
-          <Navigation />
-
-          <div className="mt-auto hidden border-t border-slate-800 p-5 lg:block">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-              Workspace
-            </p>
-            <div className="mt-3 flex items-center gap-3">
-              <span className="grid size-9 place-items-center rounded-full bg-teal-300/10 text-sm font-semibold text-teal-200">
-                DB
-              </span>
-              <div>
-                <p className="text-sm font-medium text-white">Demo Business</p>
-                <p className="text-xs text-slate-400">Prototype workspace</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <div className="lg:col-start-2">
-        <header className="hidden h-20 items-center justify-end border-b border-slate-200 bg-white px-8 lg:flex">
-          <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
-            Demo Business
-          </div>
-        </header>
-        <main className="mx-auto w-full max-w-7xl px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
-          {children}
-        </main>
+export function AppShell({ children }: { children: ReactNode }) {
+  return <div className="min-h-screen lg:grid lg:grid-cols-[232px_minmax(0,1fr)]">
+    <aside className="border-b border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:z-20 lg:flex lg:w-[232px] lg:flex-col lg:border-b-0 lg:border-r">
+      <div className="flex h-16 items-center justify-between border-b border-slate-100 px-4">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="FAIR overview"><span className="grid size-8 place-items-center rounded-lg bg-blue-600 text-sm font-bold text-white">F</span><span><span className="block text-[15px] font-bold tracking-tight text-slate-950">FAIR</span><span className="block text-[10px] text-slate-400">AI truth intelligence</span></span></Link>
+        <button type="button" aria-label="Business switcher" className="text-slate-400"><span className="text-base">⌃</span></button>
       </div>
-    </div>
-  );
+      <Navigation/>
+      <div className="hidden border-t border-slate-100 p-3 lg:block"><div className="flex items-center gap-3 rounded-lg p-2"><span className="grid size-8 place-items-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">DB</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">Demo Business</p><p className="text-[11px] text-slate-400">Competition workspace</p></div><Icon name="more" className="size-4 text-slate-400"/></div></div>
+    </aside>
+    <div className="min-w-0 lg:col-start-2"><div className="min-h-screen bg-[#f5f7fa] p-0 lg:p-3"><div className="mx-auto min-h-[calc(100vh-24px)] max-w-[1500px] overflow-hidden bg-white lg:rounded-2xl lg:border lg:border-slate-200"><div className="border-b border-slate-200 bg-white px-5 py-2.5 text-right lg:px-7"><span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600"><span className="size-1.5 rounded-full bg-green-500"/>Demo Business</span></div>{children}</div></div></div>
+  </div>;
 }

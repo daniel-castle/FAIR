@@ -1,15 +1,9 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
-
+import { PageHeader } from "@/components/page-header";
+import { Button, FilterBar, SectionCard, StatusBadge } from "@/components/ui";
+import { issues } from "@/data/demo-data";
 export const metadata: Metadata = { title: "Issues" };
-
-export default function IssuesPage() {
-  return (
-    <EmptyState
-      eyebrow="Accuracy review"
-      title="Issues"
-      description="Review mismatches, outdated claims, and possible AI hallucinations."
-      nextStep="Detected claims will be compared with verified facts and queued for human review here."
-    />
-  );
-}
+export default function IssuesPage() { return <><PageHeader title="Issues" description="Triage conflicts between verified truth, AI answers, and business sources."/><FilterBar filters={["All severities", "All classifications", "All statuses", "Last 30 days"]}/><main className="space-y-4 bg-[#f8fafc] p-5 lg:p-7">
+  <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-medium text-slate-500">Open issues</p><p className="mt-2 text-2xl font-semibold">5</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-medium text-slate-500">High priority</p><p className="mt-2 text-2xl font-semibold text-red-700">1</p></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-medium text-slate-500">Queries affected</p><p className="mt-2 text-2xl font-semibold">12</p></div></div>
+  {issues.map((issue,index) => <SectionCard key={issue.title}><div className="p-5"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-start"><div className="flex items-start gap-3"><span className={`mt-1 size-2.5 rounded-full ${issue.severity === "High" ? "bg-red-500" : issue.severity === "Medium" ? "bg-amber-500" : "bg-blue-400"}`}/><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold text-slate-950">{issue.title}</h2><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{issue.severity} severity</span></div><p className="mt-1 text-xs text-slate-500">Affects {issue.queries} benchmark queries · {issue.status}</p></div></div><Button variant={index === 0 ? "primary" : "secondary"}>Investigate</Button></div><div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><div className="rounded-lg bg-green-50 p-3"><p className="text-[10px] font-bold uppercase text-green-700">Verified truth</p><p className="mt-1 font-semibold">{issue.truth}</p></div><div className="rounded-lg bg-amber-50 p-3"><p className="text-[10px] font-bold uppercase text-amber-700">AI value</p><p className="mt-1 font-semibold">{issue.ai}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase text-slate-500">Conflicting source</p><p className="mt-1 font-semibold">{issue.source}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-[10px] font-bold uppercase text-slate-500">Classification</p><div className="mt-1"><StatusBadge state={issue.classification === "Source Fragmentation" ? "fragmented" : issue.classification === "Needs Review" ? "review" : "conflict"} label={issue.classification}/></div></div></div><p className="mt-4 text-xs text-slate-500">FAIR confidence: <strong className="text-slate-700">{issue.confidence}</strong></p></div></SectionCard>)}
+</main></>; }

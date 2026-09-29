@@ -1,70 +1,16 @@
 "use client";
-
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Icon, type IconName } from "@/components/icons";
 
-const items = [
-  { label: "Dashboard", href: "/", icon: "grid" },
-  { label: "Truth Hub", href: "/truth-hub", icon: "database" },
-  { label: "Monitoring", href: "/monitoring", icon: "pulse" },
-  { label: "Queries", href: "/queries", icon: "search" },
-  { label: "Issues", href: "/issues", icon: "alert" },
-  { label: "Insights", href: "/insights", icon: "spark" },
-] as const;
-
-function NavIcon({ name }: { name: (typeof items)[number]["icon"] }) {
-  const paths = {
-    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    database: <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" /><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>,
-    pulse: <path d="M3 12h4l2-6 4 12 2-6h6" />,
-    search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
-    alert: <><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v5" /><path d="M12 17.5v.1" /></>,
-    spark: <><path d="m12 3 1.3 4.1L17 9l-3.7 1.9L12 15l-1.3-4.1L7 9l3.7-1.9L12 3Z" /><path d="m5 14 .8 2.2L8 17l-2.2.8L5 20l-.8-2.2L2 17l2.2-.8L5 14Z" /></>,
-  };
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="size-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {paths[name]}
-    </svg>
-  );
-}
+const groups = [
+  { label: "Overview", items: [{ label: "Overview", href: "/", icon: "grid" as IconName }] },
+  { label: "Monitor", items: [{ label: "AI Monitor", href: "/monitoring", icon: "pulse" as IconName }, { label: "Queries", href: "/queries", icon: "search" as IconName }] },
+  { label: "Truth", items: [{ label: "Truth Hub", href: "/truth-hub", icon: "database" as IconName }, { label: "Issues", href: "/issues", icon: "alert" as IconName }] },
+  { label: "Improve", items: [{ label: "Insights", href: "/insights", icon: "spark" as IconName }, { label: "Human Review", href: "/human-review", icon: "review" as IconName }] },
+];
 
 export function Navigation() {
   const pathname = usePathname();
-
-  return (
-    <nav aria-label="Primary" className="overflow-x-auto px-3 pb-4 lg:px-4 lg:pt-5">
-      <ul className="flex min-w-max gap-1 lg:min-w-0 lg:flex-col">
-        {items.map((item) => {
-          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-
-          return (
-            <li key={item.href}>
-              <Link
-                href={item.href}
-                aria-current={isActive ? "page" : undefined}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-teal-300/10 text-teal-200"
-                    : "text-slate-400 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <NavIcon name={item.icon} />
-                {item.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
+  return <nav aria-label="Primary" className="fair-scrollbar flex-1 overflow-x-auto px-3 pb-3 lg:overflow-y-auto lg:py-4">{groups.map(group => <div key={group.label} className="inline-block align-top lg:mb-5 lg:block"><p className="hidden px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[.13em] text-slate-400 lg:block">{group.label}</p><ul className="flex lg:block">{group.items.map(item => { const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href); return <li key={item.href}><Link href={item.href} aria-current={active ? "page" : undefined} className={`relative flex min-w-max items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:mb-0.5 ${active ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>{active && <span className="absolute -left-3 h-5 w-0.5 rounded-r bg-blue-600 lg:block"/>}<Icon name={item.icon} className="size-[18px]"/>{item.label}</Link></li>; })}</ul></div>)}</nav>;
 }

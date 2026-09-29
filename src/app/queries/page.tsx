@@ -1,15 +1,6 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
-
+import { PageHeader } from "@/components/page-header";
+import { Button, FilterBar, SectionCard } from "@/components/ui";
+import { benchmarkQueries } from "@/data/demo-data";
 export const metadata: Metadata = { title: "Queries" };
-
-export default function QueriesPage() {
-  return (
-    <EmptyState
-      eyebrow="Search scenarios"
-      title="Queries"
-      description="Organize realistic questions by customer intent, audience, and category."
-      nextStep="Generated and human-written query sets will live here once AI integration is added."
-    />
-  );
-}
+export default function QueriesPage() { return <><PageHeader title="Queries" description="Benchmark prompts that measure how customers discover this business." action={<Button><span className="text-lg leading-none">+</span>Add query</Button>}/><FilterBar filters={["All categories", "All audiences", "All intents", "All locations", "Mention status"]}/><main className="bg-[#f8fafc] p-5 lg:p-7"><SectionCard title="Benchmark query library" description="86 queries across 5 categories"><div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Query</th><th>Category</th><th>Audience / Intent</th><th>Location</th><th>Last tested</th><th>Result</th></tr></thead><tbody>{benchmarkQueries.map(row => <tr key={row.query}><td className="min-w-72 font-semibold text-slate-800">{row.query}</td><td><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{row.category}</span></td><td><p className="text-sm">{row.audience}</p><p className="mt-0.5 text-xs text-slate-400">{row.intent}</p></td><td className="whitespace-nowrap">{row.location}</td><td className="whitespace-nowrap">{row.tested}</td><td>{row.mentioned ? <span className="inline-flex items-center gap-2 font-semibold text-green-700"><span className="size-1.5 rounded-full bg-green-500"/>Mentioned {row.position}</span> : <span className="inline-flex items-center gap-2 text-slate-500"><span className="size-1.5 rounded-full bg-slate-300"/>Not mentioned</span>}</td></tr>)}</tbody></table></div></SectionCard></main></>; }
