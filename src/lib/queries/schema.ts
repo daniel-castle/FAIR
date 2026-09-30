@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { QueryAnalysis } from "./analysis-schema";
 
 export const queryCategories = [
   "Direct product/service search", "Category discovery", "Budget/value",
@@ -15,7 +16,7 @@ export const benchmarkBatchSchema = z.object({
   queries: z.array(benchmarkQuerySchema).min(10).max(15),
 }).strict();
 export type BenchmarkQuery = z.infer<typeof benchmarkQuerySchema>;
-export type SavedQuery = BenchmarkQuery & { id: string; created_at: string };
+export type SavedQuery = BenchmarkQuery & { id: string; created_at: string; analysis?: QueryAnalysis | null };
 
 export function validateBenchmarkBatch(value: unknown) {
   const batch = benchmarkBatchSchema.parse(value);

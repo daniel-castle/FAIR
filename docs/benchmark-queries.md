@@ -13,3 +13,11 @@ Reference: https://developers.openai.com/api/docs/guides/structured-outputs
 If generation fails, the page displays an error. Refused, incomplete, invalid, or duplicate-containing batches are not saved. Save errors do not masquerade as success. A successful bulk insert is read back before reporting success.
 
 The server action is unauthenticated for this demo. Do not expose the paid generation endpoint as a production feature without authorization and cost controls. Remove the two demo policies before production and replace them with tenant-aware access.
+
+## Query analysis
+
+Run `supabase/migrations/202609300002_query_analysis.sql` to add a nullable `analysis` JSON column and column-scoped demo UPDATE access. Existing generation and query rows remain usable before this migration.
+
+On `/queries`, expand **Query Details** and click **Analyze Query** once. This makes one server-side `gpt-5.6-luna` parsing call for that saved query with a 60-second timeout, 4,000-output-token cap, and no retries or background calls. It validates all metadata with Zod, updates the saved query, and reads it back before reporting success. Reload and expand the same details to verify persistence. A valid saved analysis is reused without another paid request.
+
+Unspecified metadata remains null or an empty list. Analysis describes requested evidence, not verified business truth or an AI monitoring result. The existing benchmark generator still produces only 10–15 queries per manual invocation. Errors appear in the server terminal under `Benchmark query analysis failed:` with redacted diagnostics.
