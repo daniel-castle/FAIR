@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/page-header";
-import { Button, ProgressBar, SectionCard, StatusBadge } from "@/components/ui";
-import { Icon } from "@/components/icons";
-import { truthSections } from "@/data/demo-data";
+import { TruthHub } from "@/components/truth-hub/truth-hub";
+import { loadTruthHub } from "./actions";
 export const metadata: Metadata = { title: "Truth Hub" };
-export default function TruthHubPage() { return <><PageHeader title="Truth Hub" description="The verified information AI systems should know about this business." action={<Button><span className="text-lg leading-none">+</span>Add verified fact</Button>}/><main className="space-y-5 border-t border-slate-200 bg-[#f8fafc] p-5 lg:p-7">
-  <SectionCard><div className="grid gap-6 p-5 md:grid-cols-[1fr_auto] md:items-center"><div><div className="flex items-center justify-between"><div><p className="text-sm font-semibold text-slate-900">Truth Profile</p><p className="mt-1 text-xs text-slate-500">Verified coverage across key business information</p></div><span className="text-xl font-semibold text-blue-700 md:hidden">96%</span></div><div className="mt-4"><ProgressBar value={96}/></div><p className="mt-2 text-xs text-slate-500">48 of 50 recommended facts verified</p></div><div className="hidden border-l border-slate-100 pl-7 text-right md:block"><p className="text-3xl font-semibold text-blue-700">96%</p><p className="mt-1 text-xs text-slate-500">Complete</p></div></div></SectionCard>
-  <div className="grid gap-4 xl:grid-cols-2">{truthSections.map(section => <SectionCard key={section.title} title={section.title} action={<span className="grid size-8 place-items-center rounded-lg bg-blue-50 text-blue-600"><Icon name={section.icon}/></span>}><div>{section.facts.map(([label,value]) => <div key={label} className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4 last:border-0"><div><p className="text-xs text-slate-500">{label}</p><p className="mt-1 font-semibold text-slate-900">{value}</p></div><StatusBadge state="verified"/></div>)}</div></SectionCard>)}</div>
-  <SectionCard title="Sources" description="Where FAIR found information about this business"><div className="overflow-x-auto"><table className="data-table"><thead><tr><th>Source</th><th>Coverage</th><th>Last checked</th><th>Status</th></tr></thead><tbody><tr><td className="font-semibold text-slate-800">Website</td><td>31 facts</td><td>Today</td><td><StatusBadge state="verified" label="Current"/></td></tr><tr><td className="font-semibold text-slate-800">Google Business Profile</td><td>18 facts</td><td>Today</td><td><StatusBadge state="verified" label="Current"/></td></tr><tr><td className="font-semibold text-slate-800">old_menu.pdf</td><td>12 facts</td><td>Sep 18</td><td><StatusBadge state="fragmented" label="Outdated / Conflict"/></td></tr></tbody></table></div></SectionCard>
-</main></>; }
+export const dynamic = "force-dynamic";
+export default async function TruthHubPage() {
+  return <><PageHeader title="Truth Hub" description="Manage the trusted information AI systems should know about your business." /><TruthHub initial={await loadTruthHub()} /></>;
+}
