@@ -2,7 +2,7 @@
 
 **Understand how AI represents your business, verify what it gets right, and identify what needs human judgment.**
 
-> **Live Demo:** fair-deploy.vercel.app
+**Live Demo:** [Launch FAIR](https://fair-deploy.vercel.app)
 
 FAIR helps small and medium-sized businesses measure and improve how AI systems describe and recommend them. It combines verified business information, controlled benchmark questions, preserved model evidence, deterministic evaluation, and a human review layer in one hosted workflow.
 
