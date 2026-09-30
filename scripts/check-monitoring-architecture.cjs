@@ -74,9 +74,20 @@ assert.equal(calculateMonitoringMetrics(queries, []).factAccuracy, null);
 const openAiSource = fs.readFileSync(path.join(__dirname, "../src/lib/monitoring/openai.ts"), "utf8");
 assert(openAiSource.includes('MONITORING_MODEL = "gpt-5.6-luna"'));
 assert(openAiSource.includes("maxRetries: 0"));
-assert(openAiSource.includes("MAX_QUERIES_PER_RUN = 5"));
+assert(openAiSource.includes("MAX_QUERIES_PER_RUN = 15"));
 assert(!openAiSource.includes("mention_rate"));
 assert(!openAiSource.includes("responses.parse"));
 assert(!openAiSource.includes("extractResponseEvidence"));
 
-console.log("Passed: deterministic mention/recommendation/position parsing, linked-fact evaluation, ambiguity handling, active-set metrics, aggregate accuracy, offering coverage, and single-call OpenAI safeguards.");
+const actionsSource = fs.readFileSync(path.join(__dirname, "../src/app/monitoring/actions.ts"), "utf8");
+const runnerSource = fs.readFileSync(path.join(__dirname, "../src/components/benchmark-runner.tsx"), "utf8");
+assert.equal((actionsSource.match(/await requestMonitoredAnswer\(query\.query_text\)/g) ?? []).length, 2);
+assert(actionsSource.includes("queries: z.array(localQuerySchema).min(1).max(MAX_QUERIES_PER_RUN)"));
+assert(runnerSource.includes("selected.slice(0, 15)"));
+assert(runnerSource.includes("Run up to 15 active questions?"));
+assert(runnerSource.includes("Benchmark complete ·"));
+assert(runnerSource.includes("fixed bottom-5 right-5"));
+assert(runnerSource.includes("disabled={pending || !hasActiveQueries}"));
+assert(!runnerSource.includes("Activate at least one benchmark query"));
+
+console.log("Passed: deterministic evidence and metrics, 15-query cap, one request per selected query, gpt-5.6-luna/no-retry safeguards, and stable benchmark completion UI.");

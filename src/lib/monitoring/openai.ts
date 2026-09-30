@@ -3,7 +3,7 @@ import OpenAI from "openai";
 
 export const MONITORING_PROVIDER = "OpenAI";
 export const MONITORING_MODEL = "gpt-5.6-luna";
-export const MAX_QUERIES_PER_RUN = 5;
+export const MAX_QUERIES_PER_RUN = 15;
 
 function client() {
   if (!process.env.OPENAI_API_KEY) throw new Error("Set OPENAI_API_KEY in .env.local and restart the app before running a scan.");

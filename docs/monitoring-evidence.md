@@ -37,10 +37,10 @@ All headline metrics use current active benchmarks and the latest completed moni
 
 ## Controlled scan request count
 
-`MAX_QUERIES_PER_RUN` is 5. Each selected query makes exactly one request:
+`MAX_QUERIES_PER_RUN` is 15. Each selected query makes exactly one request:
 
 1. One `gpt-5.6-luna` request for the monitored raw answer.
 
-A full five-query run therefore makes 5 OpenAI requests. SDK retries are disabled. Scans are manual, have an explicit confirmation, and do not use background jobs, scheduling, polling, or automatic execution.
+A full fifteen-query run therefore makes 15 OpenAI requests. SDK retries are disabled. Scans are manual, have an explicit confirmation, and do not use background jobs, scheduling, polling, or automatic execution.
 
 Run `npm run check:monitoring` to validate schemas, normalization, verification, formulas, active-set exclusion, aggregate accuracy, and request safeguards without contacting Supabase or OpenAI.

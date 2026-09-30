@@ -4,7 +4,7 @@ Truth Hub read access was verified: one business, two offerings, three facts. No
 
 1. Run `supabase/migrations/202609300001_benchmark_queries.sql` in the connected project's SQL Editor. It creates the generic query table and idempotent SELECT/INSERT policies scoped to the earliest seeded business. It does not modify business, offering, fact, or source policies. The public policies are temporary competition-demo access, not production security.
 2. Add `OPENAI_API_KEY=...` to `.env.local` (server-only; never use a NEXT_PUBLIC prefix). Generation is pinned to `gpt-5.6-luna`; environment variables cannot override the model. Restart the Next.js server after changing environment variables.
-3. Open `/queries`, apply the remaining migrations below, click **Generate from Truth Hub**, and confirm a batch of 10–15 definitions is created. Reload to verify persistence.
+3. Open `/queries`, apply the remaining migrations below, click **Refresh Questions**, and confirm a batch of 15 definitions is created. Reload to verify persistence.
 
 Generation uses one OpenAI Responses API request with SDK retries disabled, structured JSON, and Zod validation. It reads the current demo business, industry, location, offerings, and only verified facts. The Truth Hub template selector is a visit-only preference; generation uses the stored industry and a verified `business_template` fact if one exists. No monitoring is performed.
 

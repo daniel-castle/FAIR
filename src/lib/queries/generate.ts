@@ -14,9 +14,11 @@ export async function generateQueries(context: ReturnType<typeof buildQueryConte
     max_output_tokens: 4000,
     input: [
       { role: "system", content: `Generate 15 distinct, realistic customer search questions for an SMB AI visibility benchmark.
-Use the provided business identity, industry, location/service area, offering names, and verified facts as context.
-Cover the seven categories where supported: direct product/service search, category discovery, budget/value, location, audience/persona, feature/specialty, comparison.
-Use mostly unbranded discovery questions and a few questions naming the business or its offerings. Vary audience and intent.
+Use the provided business identity, industry, location/service area, offering names, and verified facts as context. Determine which search categories apply from that data; do not assume a restaurant or any other specific business type.
+Return this approximate mix: 6 unbranded category/discovery questions; 3 unbranded audience or use-case questions; 3 mostly unbranded offering, value, or location questions; and 3 branded factual questions for Fact Accuracy.
+Most questions must make sense for a customer who does not already know the business exists. Only the branded factual minority should name the business. An offering name may be used unbranded when it is a generic product or service customers would search for.
+Cover the supported categories where applicable: direct product/service search, category discovery, budget/value, location, audience/persona, feature/specialty, comparison. Vary customer intent, audience, location, offering, buying situation, and stage of consideration.
+Every question must test a meaningfully different customer scenario. Do not return semantic duplicates, paraphrases of another question, or questions that differ only by swapping a few words.
 Set location to the customer location or service area when the wording is geographically specific; otherwise set it to null.
 Never invent a price, capability, location, policy, competitor name, or verified claim. Budget questions may ask about affordability without claiming a price. Comparison questions may compare provided offerings or generic alternatives without invented competitors.
 For each query, select explicit evaluation_dimensions from the schema. Discovery questions generally measure visibility, recommendation, and recommendation_position; factual questions measure visibility and factual_accuracy. Use competitor_presence only for competitor comparisons.

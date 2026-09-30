@@ -103,5 +103,37 @@ export function createDemoWorkspace(): FairWorkspace {
     if (index === 1) workspace.truthHub.facts.push(fact("ingredients", ["Heritage Duroc pork"], menuSourceId, offering.id));
     if (index === 6) workspace.truthHub.facts.push(fact("available_hours", "Friday–Sunday", menuSourceId, offering.id));
   }
+  const batch = { id: "50000000-0000-4000-8000-000000000001", created_at: "2026-09-30T00:00:00.000Z", query_count: 15 };
+  const link = (factKey: string) => {
+    const source = workspace.truthHub.facts.find(item => item.fact_key === factKey && !item.offering_id);
+    return source ? [{ id: source.id, key: factKey, offering: null, value: String(source.fact_value), verified: true }] : [];
+  };
+  const questions = [
+    ["Where can I find great Central Texas barbecue in Austin?", "Category discovery", "Austin barbecue visitor", "Discover local barbecue options", null],
+    ["What are the best barbecue restaurants near East Austin?", "Category discovery", "Local diner", "Compare nearby barbecue options", "East Austin"],
+    ["Which Austin barbecue spots are worth visiting for smoked brisket?", "Category discovery", "Food-focused visitor", "Find a barbecue specialty", "Austin"],
+    ["Where should I take out-of-town guests for Texas barbecue in Austin?", "Category discovery", "Host", "Plan a visitor meal", "Austin"],
+    ["What barbecue places in Austin are known for traditional smoked meats?", "Feature/specialty", "Barbecue enthusiast", "Find traditional barbecue", "Austin"],
+    ["Where can a family get barbecue to go in Austin?", "Audience/persona", "Family planner", "Find takeout for a group", "Austin"],
+    ["What Austin barbecue restaurant is a good choice for a casual weekend lunch?", "Audience/persona", "Weekend diner", "Plan a casual meal", "Austin"],
+    ["Where should a first-time visitor try Central Texas barbecue?", "Audience/persona", "First-time visitor", "Find a classic local experience", null],
+    ["Where can I order smoked brisket by the pound in Austin?", "Direct product/service search", "Group meal planner", "Find brisket for a group", "Austin"],
+    ["What are good barbecue options in Austin for ribs and sausage?", "Direct product/service search", "Menu explorer", "Find specific smoked meats", "Austin"],
+    ["Which Austin barbecue restaurants offer takeout?", "Feature/specialty", "Takeout customer", "Find convenient ordering", "Austin"],
+    ["Where can I find barbecue in East Austin?", "Location", "Nearby customer", "Find a local option", "East Austin"],
+    ["Is Franklin Barbecue open on Mondays?", "Feature/specialty", "Trip planner", "Verify current hours", null, "hours"],
+    ["Does Franklin Barbecue offer takeout?", "Feature/specialty", "Ordering customer", "Verify a service option", null, "takeout"],
+    ["Where is Franklin Barbecue located in Austin?", "Location", "Visitor", "Verify location details", "Austin", "location"],
+  ] as const;
+  workspace.queries = {
+    batches: [batch],
+    items: questions.map(([query_text, category, audience, intent, location, factKey], index) => ({
+      id: `60000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      query_text, category, audience, intent, location, is_active: true, origin: "generated", batch_id: batch.id, batch,
+      created_at: "2026-09-30T00:00:00.000Z", updated_at: "2026-09-30T00:00:00.000Z",
+      evaluation_dimensions: factKey ? ["visibility", "factual_accuracy"] : ["visibility", "recommendation", "recommendation_position"],
+      truth_links: factKey ? link(factKey) : [], results: [],
+    })),
+  };
   return workspace;
 }

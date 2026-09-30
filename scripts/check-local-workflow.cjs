@@ -49,6 +49,7 @@ assert(!metricsSource.includes("runWorkspaceMonitoringScan"));
 assert(!metricsSource.includes("Run AI Scan"));
 assert.doesNotThrow(() => buildWorkspaceMonitoringData(createDemoWorkspace()));
 assert.doesNotThrow(() => buildWorkspaceMonitoringData(createBlankWorkspace()));
+assert.equal(createDemoWorkspace().queries.items.filter(query => query.is_active).length, 15);
 
 function workspaceWithReviewEvidence(base) {
   const current = structuredClone(base);

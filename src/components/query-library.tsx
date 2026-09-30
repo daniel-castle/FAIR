@@ -2,10 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { generateWorkspaceBenchmarkQueries, type QueryLibrary } from "@/app/queries/actions";
-import { BenchmarkDefinition, EvaluationFields, batchTime, type EvaluationSelection } from "@/components/benchmark-definition";
+import { batchTime } from "@/components/benchmark-definition";
 import { Icon } from "@/components/icons";
 import { SectionCard } from "@/components/ui";
-import { dimensionLabels, evaluationInputSchema, truthFactsForBusiness } from "@/lib/queries/evaluation";
+import { dimensionLabels, truthFactsForBusiness, type EvaluationDimension } from "@/lib/queries/evaluation";
 import { calculateQueryMetrics } from "@/lib/queries/metrics";
 import { manualQuerySchema, queryCategories, type QueryResult, type SavedQuery } from "@/lib/queries/schema";
 import { useWorkspace } from "@/components/workspace/workspace-provider";
@@ -14,6 +14,11 @@ import { BenchmarkRunner } from "@/components/benchmark-runner";
 import { showsPosition, showsRecommendation } from "@/lib/queries/presentation";
 
 const emptyForm = { query_text: "", category: queryCategories[0], audience: "", intent: "", location: "", is_active: true };
+
+function automaticDimensions(category: SavedQuery["category"]): EvaluationDimension[] {
+  if (category === "Comparison") return ["visibility", "recommendation", "recommendation_position", "competitor_presence"];
+  return ["visibility", "recommendation", "recommendation_position"];
+}
 
 function date(value?: string) {
   if (!value) return "Not tested";
@@ -44,7 +49,6 @@ export function QueryLibraryView() {
   const [error, setError] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [evaluation, setEvaluation] = useState<EvaluationSelection>({ dimensions: ["visibility"], fact_ids: [] });
   const [form, setForm] = useState(emptyForm);
   const [filters, setFilters] = useState({ category: "", audience: "", location: "", status: "", result: "", origin: "" });
   const truthHub = workspace!.truthHub;
@@ -126,27 +130,15 @@ export function QueryLibraryView() {
     return { message: `${generated.length} generated queries are now active. The previous generated set was archived; manual queries were preserved.` };
   }
 
-  async function createLocalQuery(input: unknown, evaluationSelection: unknown) {
+  async function createLocalQuery(input: unknown) {
     const parsed = manualQuerySchema.safeParse(input);
-    const targets = evaluationInputSchema.safeParse(evaluationSelection);
-    if (!parsed.success || !targets.success) return { error: "Complete the query fields and select at least one evaluation dimension." };
-    const factsById = new Map(truthFacts.filter(fact => fact.verified).map(fact => [fact.id, fact]));
-    if (targets.data.fact_ids.some(id => !factsById.has(id))) return { error: "Select verified facts from this business's Truth Hub." };
+    if (!parsed.success) return { error: "Complete the query fields." };
     const duplicate = library.queries.some(query => query.query_text.trim().toLowerCase() === parsed.data.query_text.trim().toLowerCase());
     if (duplicate) return { error: "This exact benchmark query already exists." };
     const now = new Date().toISOString();
-    const query: SavedQuery = { ...parsed.data, id: crypto.randomUUID(), origin: "manual", batch_id: null, batch: null, created_at: now, updated_at: now, evaluation_dimensions: targets.data.dimensions, truth_links: targets.data.fact_ids.flatMap(id => factsById.get(id) ?? []), results: [] };
+    const query: SavedQuery = { ...parsed.data, id: crypto.randomUUID(), origin: "manual", batch_id: null, batch: null, created_at: now, updated_at: now, evaluation_dimensions: automaticDimensions(parsed.data.category), truth_links: [], results: [] };
     updateWorkspace(current => ({ ...current, queries: { ...current.queries, items: [query, ...current.queries.items] } }));
-    return { message: "Manual benchmark and evaluation targets saved." };
-  }
-
-  async function saveLocalEvaluation(queryId: string, selection: unknown) {
-    const parsed = evaluationInputSchema.safeParse(selection);
-    if (!parsed.success) return { error: "Select valid evaluation targets." };
-    const factsById = new Map(truthFacts.filter(fact => fact.verified).map(fact => [fact.id, fact]));
-    if (parsed.data.fact_ids.some(id => !factsById.has(id))) return { error: "Select verified facts from this business's Truth Hub." };
-    updateWorkspace(current => ({ ...current, queries: { ...current.queries, items: current.queries.items.map(item => item.id === queryId ? { ...item, evaluation_dimensions: parsed.data.dimensions, truth_links: parsed.data.fact_ids.flatMap(id => factsById.get(id) ?? []), updated_at: new Date().toISOString() } : item) } }));
-    return { message: "Evaluation targets and canonical fact links saved." };
+    return { message: "Benchmark question saved with FAIR-configured measurements." };
   }
 
   async function setLocalActive(queryId: string, isActive: boolean) {
@@ -158,8 +150,8 @@ export function QueryLibraryView() {
 
   return <main className="space-y-5 border-t border-slate-200 bg-[#f8fafc] p-5 lg:p-7">
     <div className="flex flex-wrap items-center justify-between gap-4">
-      <div><h2 className="font-semibold text-slate-950">Active benchmark set</h2><p className="mt-1 text-sm text-slate-500">Review the customer scenarios FAIR will use when monitoring becomes available.</p></div>
-      <div className="flex flex-wrap items-start gap-2"><BenchmarkRunner/><button type="button" onClick={() => run(generateLocalQueries)} disabled={pending} className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">{pending ? "Working…" : "Generate from Truth Hub"}</button><button type="button" aria-expanded={showForm} aria-controls="manual-query-form" onClick={() => setShowForm(value => !value)} disabled={pending} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{showForm ? "Close form" : "+ Add Query"}</button></div>
+      <div><h2 className="font-semibold text-slate-950">Active benchmark set</h2><p className="mt-1 text-sm text-slate-500">Run Benchmark tests these questions against the monitored AI. Refresh Questions rebuilds them from current Truth Hub information.</p></div>
+      <div className="flex flex-wrap items-start gap-2"><BenchmarkRunner/><button type="button" onClick={() => run(generateLocalQueries)} disabled={pending} className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">{pending ? "Refreshing…" : "Refresh Questions"}</button><button type="button" aria-expanded={showForm} aria-controls="manual-query-form" onClick={() => setShowForm(value => !value)} disabled={pending} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{showForm ? "Close form" : "+ Add Question"}</button></div>
     </div>
 
     <SectionCard>
@@ -173,7 +165,7 @@ export function QueryLibraryView() {
       </div>
     </SectionCard>
 
-    {showForm && <form id="manual-query-form" className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 lg:grid-cols-2" onSubmit={event => { event.preventDefault(); run(() => createLocalQuery({ ...form, location: form.location.trim() || null }, evaluation), () => { setForm(emptyForm); setEvaluation({ dimensions: ["visibility"], fact_ids: [] }); setShowForm(false); }); }}>
+    {showForm && <form id="manual-query-form" className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 lg:grid-cols-2" onSubmit={event => { event.preventDefault(); run(() => createLocalQuery({ ...form, location: form.location.trim() || null }), () => { setForm(emptyForm); setShowForm(false); }); }}>
       <div className="lg:col-span-2"><h3 className="font-semibold text-slate-900">Add a benchmark query</h3><p className="mt-1 text-xs text-slate-500">Use this for an important customer scenario that is not covered by the generated set.</p></div>
       <label className="lg:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-700">Customer question</span><textarea required minLength={10} maxLength={500} value={form.query_text} onChange={event => setForm({ ...form, query_text: event.target.value })} rows={3} placeholder="What would a real customer ask an AI assistant?" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"/></label>
       <FormSelect label="Category" value={form.category} values={[...queryCategories]} onChange={value => setForm({ ...form, category: value as typeof form.category })}/>
@@ -181,8 +173,8 @@ export function QueryLibraryView() {
       <FormInput label="Why this matters" value={form.intent} placeholder="e.g. Tests whether customers discover this service" onChange={value => setForm({ ...form, intent: value })}/>
       <FormInput label="Location" value={form.location} placeholder="Optional city or service area" required={false} onChange={value => setForm({ ...form, location: value })}/>
       <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.is_active} onChange={event => setForm({ ...form, is_active: event.target.checked })} className="size-4 accent-blue-600"/>Active and ready for future monitoring</label>
-      <div className="lg:col-span-2"><EvaluationFields selection={evaluation} onChange={setEvaluation} facts={library.truthFacts} disabled={pending}/></div>
-      <div className="flex justify-end lg:col-span-2"><button disabled={pending || !evaluation.dimensions.length} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{pending ? "Saving…" : "Save benchmark query"}</button></div>
+      <p className="text-xs leading-5 text-slate-500 lg:col-span-2">FAIR automatically configures the measurements for this question based on its category.</p>
+      <div className="flex justify-end lg:col-span-2"><button disabled={pending} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{pending ? "Saving…" : "Save benchmark question"}</button></div>
     </form>}
 
     {setupMessages.length > 0 && <div role="alert" className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{setupMessages.map((text, index) => <p key={index}>{text}</p>)}</div>}
@@ -208,28 +200,24 @@ export function QueryLibraryView() {
             <span className="flex items-center gap-4 text-xs text-slate-500"><span>{unready ? `${unready} need attention` : active.length ? "Coverage ready" : "No active coverage"}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span></span>
           </button>
           {expanded && <div id={`category-${queryCategories.indexOf(category)}`} className="border-t border-slate-100 bg-slate-50/50 p-4">
-            {matching.length ? <div className="space-y-3">{matching.map(query => <QueryCard key={query.id} query={query} library={library} pending={pending} run={run} setActive={setLocalActive} saveEvaluation={saveLocalEvaluation}/>)}</div> : <p className="p-4 text-sm text-slate-500">{all.length ? "No queries match these filters." : "No benchmarks in this category yet."}</p>}
+            {matching.length ? <div className="space-y-3">{matching.map(query => <QueryCard key={query.id} query={query} pending={pending} run={run} setActive={setLocalActive}/>)}</div> : <p className="p-4 text-sm text-slate-500">{all.length ? "No queries match these filters." : "No benchmarks in this category yet."}</p>}
           </div>}
         </section>;
       })}</div>
-      {!queries.length && <div className="border-t border-slate-100 p-6 text-center"><span className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-50 text-blue-600"><Icon name="search"/></span><p className="mt-3 text-sm font-semibold text-slate-900">{library.error ? "Query library unavailable" : library.queries.length ? "No queries match these filters" : "No benchmark queries yet"}</p><p className="mt-2 text-sm text-slate-500">{library.error ? "Complete database setup, then reload this page." : library.queries.length ? "Clear or adjust the filters to see more queries." : "Generate from Truth Hub to build your benchmark coverage."}</p></div>}
+      {!queries.length && <div className="border-t border-slate-100 p-6 text-center"><span className="mx-auto grid size-10 place-items-center rounded-lg bg-blue-50 text-blue-600"><Icon name="search"/></span><p className="mt-3 text-sm font-semibold text-slate-900">{library.error ? "Query library unavailable" : library.queries.length ? "No queries match these filters" : "No benchmark queries yet"}</p><p className="mt-2 text-sm text-slate-500">{library.error ? "Complete database setup, then reload this page." : library.queries.length ? "Clear or adjust the filters to see more queries." : "Refresh Questions to build your benchmark coverage from Truth Hub."}</p></div>}
     </SectionCard>
   </main>;
 }
 
-function QueryCard({ query, library, pending, run, setActive, saveEvaluation }: { query: SavedQuery; library: QueryLibrary; pending: boolean; run: (action: () => Promise<{ error?: string; message?: string }>) => void; setActive: (id: string, active: boolean) => Promise<{ error?: string; message?: string }>; saveEvaluation: (id: string, selection: unknown) => Promise<{ error?: string; message?: string }> }) {
+function QueryCard({ query, pending, run, setActive }: { query: SavedQuery; pending: boolean; run: (action: () => Promise<{ error?: string; message?: string }>) => void; setActive: (id: string, active: boolean) => Promise<{ error?: string; message?: string }> }) {
   const latest = query.results[0];
   const status = readiness(query);
   const dimensions = query.evaluation_dimensions ?? [];
   return <article className="rounded-lg border border-slate-200 bg-white p-4">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="text-sm font-semibold leading-6 text-slate-900">{query.query_text}</h3><p className="mt-1 text-xs text-slate-500">{query.category} · {query.audience}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.style}`}>{status.label}</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="text-sm font-semibold leading-6 text-slate-900">{query.query_text}</h3><p className="mt-1 text-xs text-slate-500">{query.audience}{query.location ? ` · ${query.location}` : ""}{query.intent ? ` · ${query.intent}` : ""}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.style}`}>{status.label}</span></div>
     <div className="mt-3 flex flex-wrap gap-1.5">{dimensions.map(dimension => <span key={dimension} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{dimensionLabels[dimension]}</span>)}{!dimensions.length && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Measurements not defined</span>}</div>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">{latest ? <span>{latest.mentioned ? "Mentioned" : "Not mentioned"} · Last tested {date(latest.tested_at)}</span> : <span/>}<button type="button" onClick={() => run(() => setActive(query.id, !query.is_active))} disabled={pending} className="font-semibold text-blue-700 disabled:opacity-50">{query.is_active ? "Deactivate" : "Activate"}</button></div>
-    <details className="mt-3 text-xs text-slate-600"><summary className="cursor-pointer font-semibold text-blue-700">Query details</summary><div className="mt-3 space-y-5 border-t border-slate-100 pt-4">
-      <BenchmarkDefinition key={`${query.id}:${query.updated_at}:${JSON.stringify(query.truth_links)}`} query={query} facts={library.truthFacts} pending={pending} onSave={value => run(() => saveEvaluation(query.id, value))}/>
-      {latest && <section><h4 className="mb-3 font-semibold text-slate-900">Latest result</h4><ResultDetails query={query} result={latest} /></section>}
-      {query.results.length > 1 && <details><summary className="cursor-pointer font-semibold text-blue-700">Earlier result history ({query.results.length - 1})</summary><div className="mt-3 space-y-3">{query.results.slice(1).map(result => <ResultDetails key={result.id} query={query} result={result} />)}</div></details>}
-    </div></details>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><div className="flex flex-wrap items-center gap-2">{latest ? <><span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{latest.mentioned ? "Mentioned" : "Not mentioned"}</span>{showsRecommendation(query) && <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{latest.recommended ? "Recommended" : "Not recommended"}</span>}{showsPosition(query) && <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">Position {latest.recommendation_position ?? "—"}</span>}<span>Tested {date(latest.tested_at)}</span></> : <span>Not tested</span>}</div><button type="button" onClick={() => run(() => setActive(query.id, !query.is_active))} disabled={pending} className="font-semibold text-blue-700 disabled:opacity-50">{query.is_active ? "Deactivate" : "Activate"}</button></div>
+    {query.results.length > 1 && <details className="mt-3 text-xs text-slate-600"><summary className="cursor-pointer font-semibold text-blue-700">Earlier result history ({query.results.length - 1})</summary><div className="mt-3 space-y-3">{query.results.slice(1).map(result => <ResultDetails key={result.id} query={query} result={result} />)}</div></details>}
   </article>;
 }
 

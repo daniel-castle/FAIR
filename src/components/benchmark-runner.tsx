@@ -15,19 +15,20 @@ export function BenchmarkRunner() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const queries = workspace!.queries.items as unknown as SavedQuery[];
+  const hasActiveQueries = queries.some(query => query.is_active);
 
   function selectedQueries() {
     const active = queries.filter(query => query.is_active).sort((a, b) => b.created_at.localeCompare(a.created_at));
     const selected = [...new Map(active.map(query => [query.category, query])).values()];
-    for (const query of active) if (selected.length < 5 && !selected.some(item => item.id === query.id)) selected.push(query);
-    return selected.slice(0, 5);
+    for (const query of active) if (selected.length < 15 && !selected.some(item => item.id === query.id)) selected.push(query);
+    return selected.slice(0, 15);
   }
 
   function scan() {
     setMessage(""); setError("");
     startTransition(async () => {
       const selected = selectedQueries();
-      if (!selected.length) { setError("Activate at least one benchmark query before running a benchmark."); setConfirming(false); return; }
+      if (!selected.length) { setConfirming(false); return; }
       const aliasKeys = new Set(["alias", "aliases", "business_alias", "business_aliases", "alternate_names"]);
       const aliases = workspace!.truthHub.facts.filter(fact => aliasKeys.has(String(fact.fact_key).toLowerCase())).flatMap(fact => {
         const value = decodeFact(fact.fact_value);
@@ -38,7 +39,7 @@ export function BenchmarkRunner() {
         queries: selected.map(query => ({ id: query.id, query_text: query.query_text, category: query.category, audience: query.audience, evaluation_dimensions: query.evaluation_dimensions ?? [], linked_facts: query.truth_links ?? [] })),
       });
       setError(response.error ?? "");
-      setMessage(response.message ?? "");
+      setMessage(response.run ? `Benchmark complete · ${response.run.query_count} questions tested` : response.message ?? "");
       if (response.run && response.results && response.claims) {
         const idsByName = new Map(workspace!.truthHub.offerings.map(offering => [String(offering.name), offering.id]));
         const queryOfferingIds = Object.fromEntries(queries.map(query => [query.id, [...new Set((query.truth_links ?? []).flatMap(fact => fact.offering && idsByName.has(fact.offering) ? [idsByName.get(fact.offering)!] : []))]]));
@@ -66,10 +67,10 @@ export function BenchmarkRunner() {
     });
   }
 
-  return <div className="space-y-3">
-    <button type="button" onClick={() => setConfirming(true)} disabled={pending} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Icon name="play"/>{pending ? "Benchmark running…" : "Run Benchmark"}</button>
-    {confirming && <div role="dialog" aria-label="Confirm benchmark" className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-left"><p className="text-sm leading-6 text-slate-700">Run up to 5 active queries? This makes one OpenAI request per selected query and saves the completed evidence in this browser.</p><div className="mt-3 flex gap-2"><button type="button" onClick={scan} disabled={pending} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{pending ? "Running…" : "Run benchmark"}</button><button type="button" onClick={() => setConfirming(false)} disabled={pending} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Cancel</button></div></div>}
-    {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {message && <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{message}</p>}
+  return <div className="relative">
+    <button type="button" onClick={() => setConfirming(true)} disabled={pending || !hasActiveQueries} title={hasActiveQueries ? undefined : "Refresh Questions or add a question before running a benchmark."} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Icon name="play"/>{pending ? "Benchmark running…" : "Run Benchmark"}</button>
+    {confirming && <div role="dialog" aria-label="Confirm benchmark" className="fixed left-1/2 top-24 z-30 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-blue-200 bg-blue-50 p-4 text-left shadow-xl"><p className="text-sm leading-6 text-slate-700">Run up to 15 active questions? This makes one OpenAI request per selected question and saves the evidence in this browser.</p><div className="mt-3 flex gap-2"><button type="button" onClick={scan} disabled={pending} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">{pending ? "Running…" : "Run benchmark"}</button><button type="button" onClick={() => setConfirming(false)} disabled={pending} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700">Cancel</button></div></div>}
+    {error && <p role="alert" className="fixed bottom-5 right-5 z-30 max-w-sm rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800 shadow-lg">{error}</p>}
+    {message && <p role="status" className="fixed bottom-5 right-5 z-30 rounded-lg border border-green-200 bg-green-50 p-3 text-sm font-medium text-green-800 shadow-lg">{message}</p>}
   </div>;
 }

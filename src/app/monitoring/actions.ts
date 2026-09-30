@@ -132,7 +132,7 @@ export async function runMonitoringScan(): Promise<ScanActionResult> {
     revalidatePath("/");
     revalidatePath("/metrics");
     revalidatePath("/queries");
-    return { runId, message: `Scan complete. ${selected.length} active benchmark queries were tested.` };
+    return { runId, message: `Benchmark complete · ${selected.length} questions tested` };
   } catch (caught) {
     console.error("Monitoring scan failed:", benchmarkErrorDetails(caught));
     if (runId) await db.from("monitoring_runs").update({ status: "failed", completed_at: new Date().toISOString(), error_message: "The scan stopped before all selected queries were completed." }).eq("id", runId);
@@ -200,7 +200,7 @@ export async function runWorkspaceMonitoringScan(snapshot: unknown) {
       run: { id: runId, business_id: parsed.data.business.id, status: "completed" as const, started_at: startedAt, completed_at: completedAt, query_count: results.length, provider: MONITORING_PROVIDER, model: MONITORING_MODEL, error_message: null },
       results,
       claims: allClaims,
-      message: `Scan complete. ${results.length} active benchmark queries were tested.`,
+      message: `Benchmark complete · ${results.length} questions tested`,
     };
   } catch (caught) {
     console.error("Workspace monitoring scan failed:", benchmarkErrorDetails(caught));

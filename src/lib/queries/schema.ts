@@ -19,7 +19,7 @@ export const generatedQuerySchema = benchmarkQuerySchema.extend({
   truth_suggestions: z.array(truthSuggestionSchema).max(12),
 }).strict();
 export const benchmarkBatchSchema = z.object({
-  queries: z.array(generatedQuerySchema).min(10).max(15),
+  queries: z.array(generatedQuerySchema).length(15),
 }).strict();
 export const manualQuerySchema = benchmarkQuerySchema.extend({
   location: z.string().trim().max(160).nullable(),
@@ -64,6 +64,14 @@ export function validateBenchmarkBatch(value: unknown) {
   benchmarkBatchSchema.parse({ queries: normalized });
   if (new Set(normalized.map(q => q.query_text.toLowerCase())).size !== normalized.length) {
     throw new Error("The generated batch contains duplicate queries. Nothing was saved.");
+  }
+  const meaningfulWords = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(word => word.length > 2 && !["the", "and", "for", "with", "what", "which", "where", "could", "would", "should"].includes(word)));
+  for (let index = 0; index < normalized.length; index++) for (let other = index + 1; other < normalized.length; other++) {
+    const left = meaningfulWords(normalized[index].query_text);
+    const right = meaningfulWords(normalized[other].query_text);
+    const intersection = [...left].filter(word => right.has(word)).length;
+    const union = new Set([...left, ...right]).size;
+    if (union && intersection / union >= 0.75) throw new Error("The generated batch contains near-duplicate questions. Nothing was saved.");
   }
   return normalized;
 }
