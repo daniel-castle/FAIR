@@ -14,6 +14,7 @@ let fakeDb;
 let aiCalls = 0;
 let generated;
 let hub;
+let testWorkspace;
 Module._load = function(id, parent, main) {
   if (id === 'react') return { ...React, useState: initial => expanded && Array.isArray(initial) ? [['Category discovery'], () => {}] : React.useState(initial) };
   if (id === 'server-only') return {};
@@ -22,6 +23,7 @@ Module._load = function(id, parent, main) {
   if (id === '@/app/truth-hub/actions') return { loadTruthHub: async () => hub };
   if (id === '@/lib/queries/generate') return { generateQueries: async () => { aiCalls++; return generated; } };
   if (id === '@/lib/queries/analyze') return { analyzeQuery: () => { throw Error('Unexpected interpretation call'); } };
+  if (id === '@/components/workspace/workspace-provider') return { useWorkspace: () => ({ workspace: testWorkspace, updateWorkspace() {} }) };
   if (id.startsWith('@/')) id = path.join(root, 'src', id.slice(2));
   return originalLoad.call(this, id, parent, main);
 };
@@ -43,8 +45,8 @@ assert.deepEqual(resolveTruthSuggestions({...hub,offerings:[...hub.offerings,{..
 assert.deepEqual(resolveTruthSuggestions({...hub,facts:[...hub.facts,{...hub.facts[0],id:id(8)}]},[suggestions[0]]),[]);
 assert(!truthFactsForBusiness(hub).some(f => f.id === id(6)));
 const query = {id:id(7),query_text:'Which business should I choose?',category:'Category discovery',audience:'New customers',intent:'Discover options',location:null,is_active:true,results:[]};
-generated = Array.from({length:12},(_,i)=>({query_text:`Which business should I choose for scenario ${i}?`,category:query.category,audience:query.audience,intent:query.intent,location:null,evaluation_dimensions:['visibility','factual_accuracy'],truth_suggestions:suggestions}));
-assert.equal(validateBenchmarkBatch({queries:generated}).length,12);
+generated = Array.from({length:15},(_,i)=>({query_text:`Which business should I choose for scenario ${i}?`,category:query.category,audience:query.audience,intent:query.intent,location:null,evaluation_dimensions:['visibility','factual_accuracy'],truth_suggestions:suggestions}));
+assert.equal(validateBenchmarkBatch({queries:generated}).length,15);
 assert.throws(()=>validateBenchmarkBatch({queries:[...generated.slice(0,11),generated[0]]}));
 assert.throws(()=>validateBenchmarkBatch({queries:generated.map(q=>({...q,evaluation_dimensions:['invented']}))}));
 assert.equal(zodTextFormat(benchmarkBatchSchema,'benchmark_queries').type,'json_schema');
@@ -56,26 +58,31 @@ assert.equal(metrics.testCoverage,50);
 assert.equal(calculateQueryMetrics([query]).mentionRate,null);
 assert.equal(calculateQueryMetrics([{...query,results:[{...result,claims_checked:0,verified_claims:0}]}]).averageAccuracy,null);
 const { QueryLibraryView } = require('../src/components/query-library.tsx');
-const batch = {id:id(11),created_at:'2026-09-30T03:58:00Z',query_count:12};
+const batch = {id:id(11),created_at:'2026-09-30T03:58:00Z',query_count:15};
 const library = {businessName:'Demo',queries:Array.from({length:36},(_,i)=>({...query,id:id(i+20)})),metrics:calculateQueryMetrics([query]),batches:[batch],truthFacts:truthFactsForBusiness(hub)};
-let html = renderToStaticMarkup(React.createElement(QueryLibraryView,{library}));
+const setTestWorkspace = value => { testWorkspace = { truthHub: { business: hub.business, offerings: hub.offerings, facts: hub.facts, sources: [] }, queries: { items: value.queries, batches: value.batches }, monitoring: { runs: [], results: [], claims: [], reviews: [], recommendations: [] }, insights: [] }; };
+setTestWorkspace(library);
+let html = renderToStaticMarkup(React.createElement(QueryLibraryView));
 assert(html.includes('Active benchmark set'));
 assert(html.includes('Benchmark Coverage'));
 assert(!html.includes(query.query_text));
 assert(!html.includes('<form'));
 assert(html.includes('Sep 30, 2026'));
 expanded = true;
-html = renderToStaticMarkup(React.createElement(QueryLibraryView,{library:{...library,queries:[{...query,origin:'generated',batch,evaluation_dimensions:['factual_accuracy'],truth_links:[]}]}}));
+setTestWorkspace({...library,queries:[{...query,origin:'generated',batch,evaluation_dimensions:['factual_accuracy'],truth_links:[]}]});
+html = renderToStaticMarkup(React.createElement(QueryLibraryView));
 assert(html.includes('Why this matters'));
 assert(html.includes('Truth information missing'));
 assert(html.includes('Needs Truth Hub link'));
 assert(!html.includes('AI Query Understanding'));
 assert(!html.includes(batch.id.slice(0,8)));
-html = renderToStaticMarkup(React.createElement(QueryLibraryView,{library:{...library,queries:[{...query,evaluation_dimensions:['visibility'],truth_links:[library.truthFacts[0]]}]}}));
+setTestWorkspace({...library,queries:[{...query,evaluation_dimensions:['visibility'],truth_links:[library.truthFacts[0]]}]});
+html = renderToStaticMarkup(React.createElement(QueryLibraryView));
 assert(!html.includes('Verified benchmark'));
 assert(html.includes('Manage benchmark'));
 assert(html.includes('Ready for monitoring'));
-html = renderToStaticMarkup(React.createElement(QueryLibraryView,{library:{...library,queries:[{...query,evaluation_dimensions:['factual_accuracy'],truth_links:[library.truthFacts[0]]}]}}));
+setTestWorkspace({...library,queries:[{...query,evaluation_dimensions:['factual_accuracy'],truth_links:[library.truthFacts[0]]}]});
+html = renderToStaticMarkup(React.createElement(QueryLibraryView));
 assert(html.includes('Verified benchmark'));
 assert(html.includes('Friday 11 PM'));
 const actions = require('../src/app/queries/actions.ts');
@@ -88,11 +95,11 @@ fakeDb = {
     let selected = ''; let batchFilter = false;
     const chain = { select(columns) {selected=columns;return this;}, eq(key) { if(key==='batch_id') batchFilter=true;return this;}, in(){return this;}, order(){return this;},limit(){return this;},
       maybeSingle:async()=>({data:hub.business,error:null}),
-      single:async()=>({data:{id:batch.id,query_count:12},error:null}),
+      single:async()=>({data:{id:batch.id,query_count:15},error:null}),
       then(resolve) {return Promise.resolve({data:batchFilter ? generated.map((_,i)=>({id:id(i+20)})) : lastOrigin==='manual' && selected==='id' && table==='benchmark_queries' ? [{id:query.id}] : [],error:preflightError?{message:'Missing migration'}:null}).then(resolve);}
     }; return chain;
   },
-  async rpc(name,args) { rpcCalls.push({name,args});lastOrigin=args.p_origin;return {data:{batch_id:batch.id,query_count:12,query_ids:[query.id]},error:saveError?{message:'Failed'}:null}; }
+  async rpc(name,args) { rpcCalls.push({name,args});lastOrigin=args.p_origin;return {data:{batch_id:batch.id,query_count:15,query_ids:[query.id]},error:saveError?{message:'Failed'}:null}; }
 };
 (async()=>{
   preflightError=true;

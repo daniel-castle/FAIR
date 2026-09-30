@@ -1,5 +1,5 @@
 import { calculateMonitoringMetrics, type MonitoringMetrics } from "@/lib/metrics/monitoring";
-import type { MonitoringResult, MonitoringRun, ResponseClaim } from "@/lib/monitoring/schema";
+import type { HumanReview, MonitoringResult, MonitoringRun, ResponseClaim } from "@/lib/monitoring/schema";
 import type { SavedQuery } from "@/lib/queries/schema";
 import type { FairWorkspace } from "./schema";
 
@@ -21,6 +21,7 @@ export function buildWorkspaceMonitoringData(workspace: FairWorkspace): Workspac
   const runs = workspace.monitoring.runs as unknown as MonitoringRun[];
   const storedResults = workspace.monitoring.results as unknown as MonitoringResult[];
   const storedClaims = workspace.monitoring.claims as unknown as ResponseClaim[];
+  const reviews = (workspace.monitoring.reviews ?? []) as unknown as HumanReview[];
   const latestRun = runs[0] ?? null;
   const metricRun = runs.find(run => run.status === "completed") ?? null;
   const latestRows = latestRun ? storedResults.filter(result => result.monitoring_run_id === latestRun.id) : [];
@@ -31,7 +32,7 @@ export function buildWorkspaceMonitoringData(workspace: FairWorkspace): Workspac
     latestRun,
     metricRun,
     results,
-    metrics: calculateMonitoringMetrics(queries, metricRows, offeringLinks(workspace, queries)),
+    metrics: calculateMonitoringMetrics(queries, metricRows, offeringLinks(workspace, queries), storedClaims, reviews),
   };
 }
 

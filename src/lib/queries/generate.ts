@@ -13,7 +13,7 @@ export async function generateQueries(context: ReturnType<typeof buildQueryConte
     store: false,
     max_output_tokens: 4000,
     input: [
-      { role: "system", content: `Generate 12 distinct, realistic customer search questions for an SMB AI visibility benchmark.
+      { role: "system", content: `Generate 15 distinct, realistic customer search questions for an SMB AI visibility benchmark.
 Use the provided business identity, industry, location/service area, offering names, and verified facts as context.
 Cover the seven categories where supported: direct product/service search, category discovery, budget/value, location, audience/persona, feature/specialty, comparison.
 Use mostly unbranded discovery questions and a few questions naming the business or its offerings. Vary audience and intent.

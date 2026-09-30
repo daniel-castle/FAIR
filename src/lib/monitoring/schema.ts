@@ -26,6 +26,38 @@ export type ResponseClaim = {
   created_at: string;
 };
 
+export type HumanReviewDecision = VerificationStatus;
+
+export type HumanReview = {
+  id: string;
+  claim_id: string;
+  original_machine_status: VerificationStatus;
+  human_status: HumanReviewDecision;
+  reviewer_note: string;
+  resolved: boolean;
+  reviewed_at: string;
+  resolved_at: string | null;
+};
+
+export type SpecialistRecommendation = {
+  id: string;
+  title: string;
+  rationale: string;
+  linked_evidence: string;
+  priority: "low" | "medium" | "high";
+  status: "proposed" | "in_progress" | "completed";
+  specialist_note: string;
+  recommended_next_action?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpecialistReviewRequest = {
+  id: string;
+  status: "requested";
+  requested_at: string;
+};
+
 export type MonitoringResult = {
   id: string;
   monitoring_run_id: string;

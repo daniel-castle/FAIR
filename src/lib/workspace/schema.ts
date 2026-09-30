@@ -29,6 +29,9 @@ export type FairWorkspace = {
     runs: WorkspaceRow[];
     results: WorkspaceRow[];
     claims: WorkspaceRow[];
+    reviews: WorkspaceRow[];
+    recommendations: WorkspaceRow[];
+    specialist_review_requests: WorkspaceRow[];
   };
   insights: WorkspaceRow[];
 };
@@ -49,5 +52,8 @@ export function isFairWorkspace(value: unknown): value is FairWorkspace {
     && Array.isArray(workspace.monitoring?.runs)
     && Array.isArray(workspace.monitoring?.results)
     && Array.isArray(workspace.monitoring?.claims)
+    && (workspace.monitoring.reviews === undefined || Array.isArray(workspace.monitoring.reviews))
+    && (workspace.monitoring.recommendations === undefined || Array.isArray(workspace.monitoring.recommendations))
+    && (workspace.monitoring.specialist_review_requests === undefined || Array.isArray(workspace.monitoring.specialist_review_requests))
     && Array.isArray(workspace.insights);
 }

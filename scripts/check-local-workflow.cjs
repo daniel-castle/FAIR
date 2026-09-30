@@ -14,6 +14,8 @@ for (const ext of [".ts", ".tsx"]) require.extensions[ext] = (mod, filename) => 
 
 const { createBlankWorkspace, createDemoWorkspace } = require("../src/lib/workspace/presets.ts");
 const { buildWorkspaceMonitoringData } = require("../src/lib/workspace/monitoring.ts");
+const { humanReviewItems, saveHumanReview, saveSpecialistRecommendation, saveSpecialistReviewRequest, specialistGuidanceEvidence } = require("../src/lib/workspace/human-review.ts");
+const { isFairWorkspace } = require("../src/lib/workspace/schema.ts");
 const { calculateMonitoringMetrics } = require("../src/lib/metrics/monitoring.ts");
 const { evaluateMonitoredResponse } = require("../src/lib/monitoring/evaluate.ts");
 const { identityAliases } = require("../src/lib/monitoring/identity.ts");
@@ -48,4 +50,49 @@ assert(!metricsSource.includes("Run AI Scan"));
 assert.doesNotThrow(() => buildWorkspaceMonitoringData(createDemoWorkspace()));
 assert.doesNotThrow(() => buildWorkspaceMonitoringData(createBlankWorkspace()));
 
-console.log("Passed: shared Overview/Metrics values, comparable-claim denominators, needs-review exclusion, dimension-aware result presentation, read-only Metrics, and shared demo/blank workspace path.");
+function workspaceWithReviewEvidence(base) {
+  const current = structuredClone(base);
+  current.queries.items = [query];
+  current.monitoring.runs = workspace.monitoring.runs;
+  current.monitoring.results = [{ ...result, business_id: current.truthHub.business.id, claims_checked: 1, verified_claims: 0, conflict_count: 1 }];
+  current.monitoring.claims = [
+    { id: "claim-needs", result_id: "result1", fact_id: "fact1", subject: String(current.truthHub.business.name), offering: null, fact_key: "hours", observed_value: "No unambiguous value found", canonical_value_snapshot: "11:00 AM", verification_status: "needs_review", evidence_text: "Open during lunch.", created_at: "2026-09-30T12:01:00Z" },
+    { id: "claim-conflict", result_id: "result1", fact_id: "fact2", subject: String(current.truthHub.business.name), offering: null, fact_key: "price", observed_value: "$20", canonical_value_snapshot: "$10", verification_status: "conflict", evidence_text: "The price is $20.", created_at: "2026-09-30T12:01:00Z" },
+  ];
+  current.monitoring.reviews = [];
+  current.monitoring.recommendations = [];
+  return current;
+}
+
+let reviewWorkspace = workspaceWithReviewEvidence(createBlankWorkspace());
+assert.deepEqual(humanReviewItems(reviewWorkspace).map(item => item.claim.verification_status).sort(), ["conflict", "needs_review"]);
+const reviewedAt = "2026-09-30T13:00:00.000Z";
+reviewWorkspace = saveHumanReview(reviewWorkspace, { id: "review1", claim_id: "claim-needs", original_machine_status: "needs_review", human_status: "verified", reviewer_note: "Confirmed against current hours.", resolved: true, reviewed_at: reviewedAt, resolved_at: reviewedAt });
+let adjudicated = buildWorkspaceMonitoringData(reviewWorkspace).metrics;
+assert.equal(adjudicated.factAccuracy, 50);
+assert.equal(adjudicated.conflictRate, 50);
+reviewWorkspace = saveHumanReview(reviewWorkspace, { id: "review1", claim_id: "claim-needs", original_machine_status: "needs_review", human_status: "conflict", reviewer_note: "Specialist confirmed the mismatch.", resolved: true, reviewed_at: reviewedAt, resolved_at: reviewedAt });
+adjudicated = buildWorkspaceMonitoringData(reviewWorkspace).metrics;
+assert.equal(adjudicated.factAccuracy, 0);
+assert.equal(adjudicated.conflictRate, 100);
+assert.equal(reviewWorkspace.monitoring.claims[0].verification_status, "needs_review");
+const refreshed = JSON.parse(JSON.stringify(reviewWorkspace));
+assert.equal(refreshed.monitoring.reviews[0].reviewer_note, "Specialist confirmed the mismatch.");
+assert.equal(refreshed.monitoring.reviews[0].reviewed_at, reviewedAt);
+assert.equal(isFairWorkspace(refreshed), true);
+assert.deepEqual(createBlankWorkspace().monitoring.reviews, []);
+assert.deepEqual(createDemoWorkspace().monitoring.reviews, []);
+assert.deepEqual(humanReviewItems(workspaceWithReviewEvidence(createBlankWorkspace())).map(item => item.claim.verification_status), humanReviewItems(workspaceWithReviewEvidence(createDemoWorkspace())).map(item => item.claim.verification_status));
+assert(specialistGuidanceEvidence(reviewWorkspace).some(item => item.id === "unresolved-conflicts"));
+const recommendation = { id: "rec1", title: "Correct the public price", rationale: "Benchmark evidence conflicts with verified truth.", linked_evidence: "unresolved-conflicts", priority: "high", status: "proposed", specialist_note: "Coordinate with the site owner.", created_at: reviewedAt, updated_at: reviewedAt };
+const withRecommendation = saveSpecialistRecommendation(reviewWorkspace, recommendation);
+assert.deepEqual(JSON.parse(JSON.stringify(withRecommendation)).monitoring.recommendations[0], recommendation);
+const withRequest = saveSpecialistReviewRequest(withRecommendation, { id: "request1", status: "requested", requested_at: reviewedAt });
+assert.equal(JSON.parse(JSON.stringify(withRequest)).monitoring.specialist_review_requests[0].status, "requested");
+const customerReviewSource = fs.readFileSync(path.join(root, "src/components/human-review-dashboard.tsx"), "utf8");
+assert(!customerReviewSource.includes("Confirm accurate"));
+assert(!customerReviewSource.includes("Create specialist recommendation"));
+assert(customerReviewSource.includes("Request specialist review"));
+assert(customerReviewSource.includes("Mark action completed"));
+
+console.log("Passed: shared metrics, customer-facing Human Review queue/action controls, audit persistence/reset, specialist guidance persistence, and identical demo/custom workspace logic.");

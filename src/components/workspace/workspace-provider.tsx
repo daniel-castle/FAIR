@@ -25,7 +25,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY);
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
-          if (isFairWorkspace(parsed)) setWorkspace(parsed);
+          if (isFairWorkspace(parsed)) setWorkspace({
+            ...parsed,
+            monitoring: { ...parsed.monitoring, reviews: parsed.monitoring.reviews ?? [], recommendations: parsed.monitoring.recommendations ?? [], specialist_review_requests: parsed.monitoring.specialist_review_requests ?? [] },
+          });
           else localStorage.removeItem(WORKSPACE_STORAGE_KEY);
         }
       } catch {

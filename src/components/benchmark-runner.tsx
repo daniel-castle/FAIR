@@ -46,6 +46,7 @@ export function BenchmarkRunner() {
         updateWorkspace(current => ({
           ...current,
           monitoring: {
+            ...current.monitoring,
             runs: [{ ...response.run, metric_snapshot: metricSnapshot }, ...current.monitoring.runs],
             results: [...response.results, ...current.monitoring.results],
             claims: [...response.claims, ...current.monitoring.claims],

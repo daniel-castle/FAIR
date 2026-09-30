@@ -11,7 +11,7 @@ function baseWorkspace(mode: WorkspaceMode, business: WorkspaceRow): FairWorkspa
     updatedAt: now,
     truthHub: { business, offerings: [], facts: [], sources: [] },
     queries: { items: [], batches: [] },
-    monitoring: { runs: [], results: [], claims: [] },
+    monitoring: { runs: [], results: [], claims: [], reviews: [], recommendations: [], specialist_review_requests: [] },
     insights: [],
   };
 }
