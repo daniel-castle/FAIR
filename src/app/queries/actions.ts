@@ -5,6 +5,7 @@ import { loadTruthHub } from "@/app/truth-hub/actions";
 import { createSupabaseClient } from "@/lib/supabase/server";
 import { buildQueryContext } from "@/lib/queries/context";
 import { generateQueries } from "@/lib/queries/generate";
+import { benchmarkErrorDetails } from "@/lib/queries/error-log";
 import type { SavedQuery } from "@/lib/queries/schema";
 
 export type QueryLibrary = { queries: SavedQuery[]; businessName: string; error?: string; setup?: string };
@@ -51,7 +52,7 @@ export async function generateBenchmarkQueries(): Promise<GenerateResult> {
     revalidatePath("/queries");
     return { message: count ? `Saved ${count} benchmark queries. ${queries.length - count ? "Existing duplicates were skipped." : "Ready for future AI scans."}` : "All generated queries already exist in your library." };
   } catch (error) {
-    console.error("Benchmark generation failed:", error instanceof Error ? error.message : "Unknown error");
+    console.error("Benchmark generation failed:", benchmarkErrorDetails(error));
     return { error: error instanceof Error && (error.message.startsWith("Set OPENAI") || error.message.startsWith("The model") || error.message.startsWith("The generated")) ? error.message : "Query generation failed. Check the server’s OpenAI key, model access, and API quota, then retry. No query batch was saved." };
   }
 }

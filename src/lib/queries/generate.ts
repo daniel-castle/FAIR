@@ -9,7 +9,7 @@ export async function generateQueries(context: ReturnType<typeof buildQueryConte
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, maxRetries: 0, timeout: 60_000 });
   // One model request per generation, including on errors (SDK retries disabled).
   const response = await client.responses.parse({
-    model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    model: "gpt-5.6-luna",
     store: false,
     max_output_tokens: 4000,
     input: [
