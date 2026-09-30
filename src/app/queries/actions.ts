@@ -192,3 +192,28 @@ export async function generateBenchmarkQueries(): Promise<ActionResult> {
     return { error: caught instanceof Error && (caught.message.startsWith("Set OPENAI") || caught.message.startsWith("The model") || caught.message.startsWith("The generated")) ? caught.message : "Query generation or save could not be confirmed. Reload before retrying, then check the server diagnostics." };
   }
 }
+
+const workspaceRowSchema = z.object({ id: z.uuid() }).catchall(z.unknown());
+const workspaceTruthHubSchema = z.object({
+  business: workspaceRowSchema,
+  offerings: z.array(workspaceRowSchema).max(100),
+  facts: z.array(workspaceRowSchema).max(500),
+  sources: z.array(workspaceRowSchema).max(100),
+}).strict();
+
+export async function generateWorkspaceBenchmarkQueries(snapshot: unknown) {
+  try {
+    const parsed = workspaceTruthHubSchema.safeParse(snapshot);
+    if (!parsed.success) return { error: "The browser Truth Hub snapshot is invalid." };
+    const hub = { ...parsed.data, errors: [] };
+    const generated = await generateQueries(buildQueryContext(hub));
+    const queries = generated.map(({ truth_suggestions, ...query }) => ({
+      ...query,
+      fact_ids: resolveTruthSuggestions(hub, truth_suggestions),
+    }));
+    return { queries };
+  } catch (caught) {
+    console.error("Workspace benchmark generation failed:", benchmarkErrorDetails(caught));
+    return { error: caught instanceof Error && (caught.message.startsWith("Set OPENAI") || caught.message.startsWith("The model") || caught.message.startsWith("The generated")) ? caught.message : "Query generation could not be completed. Please try again." };
+  }
+}

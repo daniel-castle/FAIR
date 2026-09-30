@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, type FormEvent, type ReactNode } from "react";
-import { businessTemplates, type TemplateField } from "@/data/business-templates";
+import { businessTemplates, findTemplate, offeringFields, type TemplateField } from "@/data/business-templates";
 import { display, verified, type HubData, type Row } from "@/lib/truth-hub";
-import { loadTruthHub, saveTruthHub } from "@/app/truth-hub/actions";
 import { FieldGroups, GuidedFieldEditor, OfferingEditor } from "./guided-forms";
-import { friendlyValue, hasValue, readField } from "@/lib/truth-fields";
+import { findFact, friendlyValue, hasValue, normalizeField, readField } from "@/lib/truth-fields";
 import { ProgressBar, SectionCard, StatusBadge } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
 
 const control = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-2 focus:outline-blue-600";
 function Action({ children, onClick, disabled, primary = false }: { children: ReactNode; onClick?: () => void; disabled?: boolean; primary?: boolean }) {
@@ -16,12 +16,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) { re
 function date(row: Row) { const value = row.updated_at ?? row.created_at; return value ? new Date(String(value)).toLocaleDateString("en-US", { timeZone: "UTC" }) : "Not recorded"; }
 type Editor = { kind: "offering" | "fact" | "business" | "source"; row?: Row; key?: string; offeringId?: string };
 
-export function TruthHub({ initial }: { initial: HubData }) {
-  const [data, setData] = useState(initial);
+type Mutation = { table: "businesses" | "offerings" | "facts" | "sources"; id?: string; remove?: boolean; values?: Record<string, unknown> };
+
+export function TruthHub() {
+  const { workspace, updateWorkspace } = useWorkspace();
+  const data: HubData = { ...workspace!.truthHub, errors: [] };
   const [templateId, setTemplateId] = useState(() => {
-    const stored = initial.facts.find(f => !f.offering_id && f.fact_key === "business_template")?.fact_value;
+    const stored = data.facts.find(f => !f.offering_id && f.fact_key === "business_template")?.fact_value;
     if (businessTemplates.some(t => t.id === stored)) return String(stored);
-    const industry = String(initial.business?.industry ?? "").toLowerCase();
+    const industry = String(data.business?.industry ?? "").toLowerCase();
     return businessTemplates.find(t => t.id !== "generic" && (industry.includes(t.id) || industry.includes(t.label.split(" / ")[0].toLowerCase())))?.id ?? "generic";
   });
   const [guided, setGuided] = useState<{ field: TemplateField; offeringId?: string } | null>(null);
@@ -41,19 +44,70 @@ export function TruthHub({ initial }: { initial: HubData }) {
   const completed = (data.business?.name ? 1 : 0) + recommended.filter(f => hasValue(readField(data.facts, f, data.business))).length + data.offerings.reduce((n, o) => n + offeringRecommended.filter(f => hasValue(readField(data.facts, f, data.business, o.id))).length, 0);
   const completion = Math.round(completed / total * 100);
   const missing = [...recommended.filter(f => !hasValue(readField(data.facts, f, data.business))).map(f => f.label), ...offeringRecommended.filter(f => !data.offerings.length || data.offerings.some(o => !hasValue(readField(data.facts, f, data.business, o.id)))).map(f => f.label === "Price" ? "Pricing" : `Offering ${f.label.toLowerCase()}`)];
-  async function refreshed() { setData(await loadTruthHub()); setNotice("Saved to Supabase."); }
+  async function refreshed() { setNotice("Saved to this browser workspace."); }
   const active = data.offerings.find(o => o.id === selected);
   const canEdit = !!data.business && !busy;
 
-  async function mutate(input: Parameters<typeof saveTruthHub>[0]) {
+  async function mutate(input: Mutation) {
     setBusy(true); setNotice("");
     try {
-      const result = await saveTruthHub(input);
-      if (result.error) { setNotice(result.error); return; }
-      setData(await loadTruthHub()); setEditor(null); setNotice(input.remove ? "Deleted from Supabase." : "Saved to Supabase.");
+      const now = new Date().toISOString();
+      updateWorkspace(current => {
+        const truthHub = current.truthHub;
+        if (input.table === "businesses") return { ...current, truthHub: { ...truthHub, business: { ...truthHub.business, ...input.values, updated_at: now } } };
+        const key = input.table;
+        let rows = [...truthHub[key]];
+        if (input.remove) rows = rows.filter(row => row.id !== input.id);
+        else if (input.id) rows = rows.map(row => row.id === input.id ? { ...row, ...input.values, updated_at: now } : row);
+        else rows.push({ id: crypto.randomUUID(), business_id: truthHub.business.id, ...input.values, created_at: now, updated_at: now });
+        const nextTruthHub = { ...truthHub, [key]: rows };
+        if (input.remove && input.table === "offerings") nextTruthHub.facts = nextTruthHub.facts.filter(row => row.offering_id !== input.id);
+        return { ...current, truthHub: nextTruthHub };
+      });
+      setEditor(null); setNotice(input.remove ? "Deleted from this browser workspace." : "Saved to this browser workspace.");
       if (input.remove && input.table === "offerings") setSelected(null);
-    } catch { setNotice("Could not reach Supabase. Your changes have not been confirmed; please retry."); }
+    } catch { setNotice("Could not save to this browser workspace. Please retry."); }
     finally { setBusy(false); }
+  }
+
+  async function saveField(input: { templateId: string; key: string; value: unknown; offeringId?: string; verified: boolean; custom?: boolean }) {
+    const field = findTemplate(input.templateId).fields.find(item => item.key === input.key && item.scope === (input.offeringId ? "offering" : "business"));
+    if (!field) return { error: "Choose a field from your business template." };
+    let value: string;
+    try {
+      value = input.custom ? String(input.value).trim() : normalizeField(field, input.value);
+      if (!value || value.length > 20000) throw new Error("Enter a value of up to 20,000 characters.");
+    } catch (error) { return { error: error instanceof Error ? error.message : "Check the field value." }; }
+    const existing = findFact(data.facts, field, input.offeringId);
+    await mutate({ table: "facts", id: existing?.id, values: { fact_key: existing?.fact_key ?? field.key, fact_value: value, verified: input.verified, offering_id: input.offeringId ?? null } });
+    return {};
+  }
+
+  async function saveOffering(input: { templateId: string; id?: string; name: string; type: string; description: string; values: Record<string, unknown>; verified: boolean }): Promise<{ error?: string; row?: Row }> {
+    if (!input.name.trim() || input.name.length > 200 || !["product", "service", "menu_item"].includes(input.type)) return { error: "Enter a name and choose Product, Service, or Menu item." };
+    const fields = offeringFields(findTemplate(input.templateId), input.type);
+    const offeringId = input.id ?? crypto.randomUUID();
+    const now = new Date().toISOString();
+    try {
+      const values = Object.entries(input.values).map(([key, value]) => {
+        const field = fields.find(item => item.key === key);
+        if (!field) throw new Error("This field is not available for the selected offering.");
+        return { field, value: normalizeField(field, value) };
+      });
+      updateWorkspace(current => {
+        const truthHub = current.truthHub;
+        const offering = { id: offeringId, business_id: truthHub.business.id, name: input.name.trim(), offering_type: input.type, description: input.description.trim(), created_at: now, updated_at: now };
+        const offerings = input.id ? truthHub.offerings.map(row => row.id === input.id ? { ...row, ...offering } : row) : [...truthHub.offerings, offering];
+        let facts = [...truthHub.facts];
+        for (const entry of values) {
+          const existing = findFact(facts, entry.field, offeringId);
+          const fact = { id: existing?.id ?? crypto.randomUUID(), business_id: truthHub.business.id, offering_id: offeringId, source_id: existing?.source_id ?? null, fact_key: String(existing?.fact_key ?? entry.field.key), fact_value: entry.value, verified: input.verified, created_at: String(existing?.created_at ?? now), updated_at: now };
+          facts = existing ? facts.map(row => row.id === existing.id ? fact : row) : [...facts, fact];
+        }
+        return { ...current, truthHub: { ...truthHub, offerings, facts } };
+      });
+      return { row: { id: offeringId } };
+    } catch (error) { return { error: error instanceof Error ? error.message : "Check the offering details." }; }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!editor) return;
@@ -66,16 +120,14 @@ export function TruthHub({ initial }: { initial: HubData }) {
   const factList = (facts: Row[]) => facts.length ? <div className="divide-y divide-slate-100">{facts.map(f => <div key={f.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div className="min-w-0"><p className="text-xs text-slate-500">{display(f.fact_key).replaceAll("_", " ")}</p><p className="mt-1 break-words font-medium">{friendlyValue(f.fact_value)}</p></div><div className="flex items-center gap-2"><StatusBadge state={verified(f) ? "verified" : "review"} /><Action disabled={!canEdit} onClick={() => setEditor({ kind: "fact", row: f })}>Edit</Action><Action disabled={!canEdit} onClick={() => { if (confirm("Delete this fact?")) void mutate({ table: "facts", id: f.id, remove: true }); }}>Delete</Action></div></div>)}</div> : <p className="p-5 text-sm text-slate-500">No facts yet. Add the details customers should know.</p>;
 
   return <main className="space-y-5 border-t border-slate-200 bg-[#f8fafc] p-5 lg:p-7">
-    {data.errors.length > 0 && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{data.errors.join(" ")} <button className="ml-2 underline" onClick={async () => { setBusy(true); try { setData(await loadTruthHub()); } finally { setBusy(false); } }} disabled={busy}>Retry connection</button></div>}
     {notice && <p role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">{notice}</p>}
     <SectionCard><div className="grid gap-6 p-5 lg:grid-cols-2"><div><p className="text-xs font-bold uppercase tracking-wider text-blue-600">Business control center</p><h2 className="mt-2 text-xl font-semibold">{data.business ? display(data.business.name) : "Your business truth profile"}</h2><p className="mt-1 text-sm text-slate-500">{template.label}</p><div className="mt-5 flex justify-between text-sm font-semibold"><span>Truth Profile</span><span className="text-blue-700">{completion}% Complete</span></div><div className="mt-3"><ProgressBar value={completion} /></div><p className="mt-2 text-xs text-slate-500">{completed} of {total} recommended details complete</p>{missing.length > 0 && <p className="mt-2 text-xs text-amber-700">Missing: {[...new Set(missing)].join(" · ")}</p>}</div><div className="grid grid-cols-3 items-center gap-3 lg:border-l lg:border-slate-100 lg:pl-6">{[["Verified facts", data.facts.filter(verified).length], ["Offerings", data.offerings.length], ["Sources", data.sources.length]].map(([label, count]) => <div key={label}><p className="text-3xl font-semibold text-slate-900">{count}</p><p className="mt-1 text-xs text-slate-500">{label}</p></div>)}</div></div></SectionCard>
     <SectionCard title="Business template" description="Choose the questions that fit your business. Your existing facts stay available."><div className="grid gap-4 p-5 md:grid-cols-2"><Field label="Template"><select className={control} value={templateId} disabled={!canEdit} onChange={async e => {
         const id = e.target.value; setBusy(true); setNotice("");
         try {
           const existing = data.facts.find(f => !f.offering_id && f.fact_key === "business_template");
-          const result = await saveTruthHub({ table: "facts", id: existing?.id, values: { fact_key: "business_template", fact_value: id, verified: true, offering_id: null } });
-          if (result.error) { setNotice(result.error); return; }
-          setTemplateId(id); await refreshed();
+          await mutate({ table: "facts", id: existing?.id, values: { fact_key: "business_template", fact_value: id, verified: true, offering_id: null } });
+          setTemplateId(id);
         } catch { setNotice("Template could not be saved. Please retry."); } finally { setBusy(false); }
       }}>{businessTemplates.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}</select></Field><div className="self-center text-sm text-slate-500"><p>{template.description}</p><p className="mt-1 text-xs">{data.facts.some(f => f.fact_key === "business_template" && !f.offering_id) ? "Saved to your business profile" : "Suggested from your industry · choose a template to save your preference"}</p></div></div></SectionCard>
     <SectionCard title="Business Information" description="Choose a detail to update. Recommended information contributes to your profile.">
@@ -102,8 +154,8 @@ export function TruthHub({ initial }: { initial: HubData }) {
       {importMode && <div className="mx-5 mb-5 space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4"><div className="flex justify-between"><h3 className="font-semibold">{importMode === "csv" ? "CSV mapping preview" : "File source preview"} · Prototype</h3><Action onClick={() => setImportMode(null)}>Close</Action></div><input aria-label="Select source file" type="file" accept={importMode === "csv" ? ".csv" : ".pdf,.txt,.doc,.docx,.png,.jpg"} onChange={e => setFilename(e.target.files?.[0]?.name ?? "")} />{filename && <p className="text-sm">Selected: {filename}</p>}{importMode === "csv" && <p className="text-xs">Planned mapping: name → offering · price / attributes → facts · file → source</p>}<p className="text-xs text-slate-600">Preview only. Files are not uploaded or saved. {importMode === "csv" ? "CSV parsing and import are coming soon." : "File storage and metadata ingestion are coming soon; OCR and extraction are not enabled."}</p><Action disabled>{importMode === "csv" ? "Import · Coming Soon" : "Upload · Coming Soon"}</Action></div>}
     </SectionCard>
     <SectionCard title="Sources" description="Where your business information comes from." action={<Action disabled={!canEdit} onClick={() => setEditor({ kind: "source" })}>Add Source</Action>}>{data.sources.length ? <div className="overflow-x-auto"><table className="data-table"><thead><tr>{["Source", "Type", "Status", "Last updated", "Facts"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{data.sources.map(s => <tr key={s.id}><td className="font-medium">{display(s.name)}</td><td>{display(s.source_type)}</td><td><StatusBadge state={s.status === "current" ? "verified" : "review"} label={s.status === "current" ? "Current" : s.status === "outdated" ? "Outdated" : "Needs Review"} /></td><td>{date(s)}</td><td>{data.facts.filter(f => f.source_id === s.id).length}</td></tr>)}</tbody></table></div> : <div className="p-10 text-center"><p className="font-semibold">No sources added yet</p><p className="mt-2 text-sm text-slate-500">Add a website to record where your information comes from.</p></div>}</SectionCard>
-    {guided && <GuidedFieldEditor field={guided.field} offeringId={guided.offeringId} data={data} template={template} close={() => setGuided(null)} saved={refreshed} />}
-    {offeringEditor && <OfferingEditor offering={offeringEditor.row} data={data} template={template} close={() => setOfferingEditor(null)} saved={refreshed} />}
+    {guided && <GuidedFieldEditor field={guided.field} offeringId={guided.offeringId} data={data} template={template} close={() => setGuided(null)} saved={refreshed} saveField={saveField} />}
+    {offeringEditor && <OfferingEditor offering={offeringEditor.row} data={data} template={template} close={() => setOfferingEditor(null)} saved={refreshed} saveOffering={saveOffering} />}
     {editor && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-5"><section role="dialog" aria-modal="true" aria-labelledby="editor-title" className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl"><h2 id="editor-title" className="text-lg font-semibold">{editor.row ? "Edit" : "Add"} {editor.kind === "business" ? "business name" : editor.kind}</h2><form onSubmit={submit} className="mt-5 space-y-4">
       {editor.kind !== "fact" && <Field label="Name"><input autoFocus required maxLength={200} name="name" defaultValue={editor.row ? display(editor.row.name) : ""} className={control} /></Field>}
       {editor.kind === "offering" && <><Field label="Offering type"><input required name="offering_type" placeholder="product, service, or menu item" defaultValue={String(editor.row?.offering_type ?? "service")} className={control} /></Field><Field label="Description"><textarea name="description" defaultValue={String(editor.row?.description ?? "")} className={control} /></Field><p className="text-xs text-slate-500">After saving, open View Details to add prices, categories, and other facts.</p></>}

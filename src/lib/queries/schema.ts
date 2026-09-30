@@ -32,6 +32,7 @@ export type QueryResult = {
   ai_platform: string;
   tested_at: string;
   mentioned: boolean;
+  recommended?: boolean;
   recommendation_position: number | null;
   response_text: string | null;
   response_reference: string | null;

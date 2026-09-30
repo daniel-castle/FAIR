@@ -1,18 +1,17 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import {
-  createBenchmarkQuery,
-  generateBenchmarkQueries,
-  saveBenchmarkEvaluation,
-  setBenchmarkQueryActive,
-  type QueryLibrary,
-} from "@/app/queries/actions";
+import { generateWorkspaceBenchmarkQueries, type QueryLibrary } from "@/app/queries/actions";
 import { BenchmarkDefinition, EvaluationFields, batchTime, type EvaluationSelection } from "@/components/benchmark-definition";
 import { Icon } from "@/components/icons";
 import { SectionCard } from "@/components/ui";
-import { dimensionLabels } from "@/lib/queries/evaluation";
-import { queryCategories, type QueryResult, type SavedQuery } from "@/lib/queries/schema";
+import { dimensionLabels, evaluationInputSchema, truthFactsForBusiness } from "@/lib/queries/evaluation";
+import { calculateQueryMetrics } from "@/lib/queries/metrics";
+import { manualQuerySchema, queryCategories, type QueryResult, type SavedQuery } from "@/lib/queries/schema";
+import { useWorkspace } from "@/components/workspace/workspace-provider";
+import type { GenerationBatch } from "@/lib/queries/evaluation";
+import { BenchmarkRunner } from "@/components/benchmark-runner";
+import { showsPosition, showsRecommendation } from "@/lib/queries/presentation";
 
 const emptyForm = { query_text: "", category: queryCategories[0], audience: "", intent: "", location: "", is_active: true };
 
@@ -38,7 +37,8 @@ function SelectFilter({ label, value, values, onChange }: { label: string; value
   return <select aria-label={label} value={value} onChange={event => onChange(event.target.value)} className="h-9 min-w-36 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-600"><option value="">All {label.toLowerCase()}</option>{values.map(item => <option key={item} value={item}>{item}</option>)}</select>;
 }
 
-export function QueryLibraryView({ library }: { library: QueryLibrary }) {
+export function QueryLibraryView() {
+  const { workspace, updateWorkspace } = useWorkspace();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -47,6 +47,16 @@ export function QueryLibraryView({ library }: { library: QueryLibrary }) {
   const [evaluation, setEvaluation] = useState<EvaluationSelection>({ dimensions: ["visibility"], fact_ids: [] });
   const [form, setForm] = useState(emptyForm);
   const [filters, setFilters] = useState({ category: "", audience: "", location: "", status: "", result: "", origin: "" });
+  const truthHub = workspace!.truthHub;
+  const hub = { ...truthHub, errors: [] };
+  const truthFacts = truthFactsForBusiness(hub);
+  const library: QueryLibrary = {
+    queries: workspace!.queries.items as unknown as SavedQuery[],
+    businessName: String(truthHub.business.name || "your business"),
+    metrics: calculateQueryMetrics(workspace!.queries.items as unknown as SavedQuery[]),
+    batches: workspace!.queries.batches as unknown as GenerationBatch[],
+    truthFacts,
+  };
 
   const options = useMemo(() => ({
     categories: [...new Set(library.queries.map(query => query.category))],
@@ -83,12 +93,73 @@ export function QueryLibraryView({ library }: { library: QueryLibrary }) {
     });
   }
 
+  async function generateLocalQueries() {
+    const result = await generateWorkspaceBenchmarkQueries(truthHub);
+    if (result.error || !result.queries) return { error: result.error ?? "Query generation returned no queries." };
+    const now = new Date().toISOString();
+    const batch = { id: crypto.randomUUID(), created_at: now, query_count: result.queries.length };
+    const factsById = new Map(truthFacts.map(fact => [fact.id, fact]));
+    const generated: SavedQuery[] = result.queries.map(query => ({
+      id: crypto.randomUUID(),
+      query_text: query.query_text,
+      category: query.category,
+      audience: query.audience,
+      intent: query.intent,
+      location: query.location,
+      is_active: true,
+      origin: "generated",
+      batch_id: batch.id,
+      batch,
+      created_at: now,
+      updated_at: now,
+      evaluation_dimensions: query.evaluation_dimensions,
+      truth_links: query.fact_ids.flatMap(id => factsById.get(id) ?? []),
+      results: [],
+    }));
+    updateWorkspace(current => ({
+      ...current,
+      queries: {
+        items: [...generated, ...current.queries.items.map(query => query.origin === "generated" ? { ...query, is_active: false, updated_at: now } : query)],
+        batches: [batch, ...current.queries.batches],
+      },
+    }));
+    return { message: `${generated.length} generated queries are now active. The previous generated set was archived; manual queries were preserved.` };
+  }
+
+  async function createLocalQuery(input: unknown, evaluationSelection: unknown) {
+    const parsed = manualQuerySchema.safeParse(input);
+    const targets = evaluationInputSchema.safeParse(evaluationSelection);
+    if (!parsed.success || !targets.success) return { error: "Complete the query fields and select at least one evaluation dimension." };
+    const factsById = new Map(truthFacts.filter(fact => fact.verified).map(fact => [fact.id, fact]));
+    if (targets.data.fact_ids.some(id => !factsById.has(id))) return { error: "Select verified facts from this business's Truth Hub." };
+    const duplicate = library.queries.some(query => query.query_text.trim().toLowerCase() === parsed.data.query_text.trim().toLowerCase());
+    if (duplicate) return { error: "This exact benchmark query already exists." };
+    const now = new Date().toISOString();
+    const query: SavedQuery = { ...parsed.data, id: crypto.randomUUID(), origin: "manual", batch_id: null, batch: null, created_at: now, updated_at: now, evaluation_dimensions: targets.data.dimensions, truth_links: targets.data.fact_ids.flatMap(id => factsById.get(id) ?? []), results: [] };
+    updateWorkspace(current => ({ ...current, queries: { ...current.queries, items: [query, ...current.queries.items] } }));
+    return { message: "Manual benchmark and evaluation targets saved." };
+  }
+
+  async function saveLocalEvaluation(queryId: string, selection: unknown) {
+    const parsed = evaluationInputSchema.safeParse(selection);
+    if (!parsed.success) return { error: "Select valid evaluation targets." };
+    const factsById = new Map(truthFacts.filter(fact => fact.verified).map(fact => [fact.id, fact]));
+    if (parsed.data.fact_ids.some(id => !factsById.has(id))) return { error: "Select verified facts from this business's Truth Hub." };
+    updateWorkspace(current => ({ ...current, queries: { ...current.queries, items: current.queries.items.map(item => item.id === queryId ? { ...item, evaluation_dimensions: parsed.data.dimensions, truth_links: parsed.data.fact_ids.flatMap(id => factsById.get(id) ?? []), updated_at: new Date().toISOString() } : item) } }));
+    return { message: "Evaluation targets and canonical fact links saved." };
+  }
+
+  async function setLocalActive(queryId: string, isActive: boolean) {
+    updateWorkspace(current => ({ ...current, queries: { ...current.queries, items: current.queries.items.map(item => item.id === queryId ? { ...item, is_active: isActive, updated_at: new Date().toISOString() } : item) } }));
+    return { message: `Query ${isActive ? "activated" : "paused"}.` };
+  }
+
   const setupMessages = [library.error, library.setup, library.resultsSetup, library.generationSetup, library.definitionSetup, library.truthSetup, error].filter(Boolean);
 
   return <main className="space-y-5 border-t border-slate-200 bg-[#f8fafc] p-5 lg:p-7">
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><h2 className="font-semibold text-slate-950">Active benchmark set</h2><p className="mt-1 text-sm text-slate-500">Review the customer scenarios FAIR will use when monitoring becomes available.</p></div>
-      <div className="flex flex-wrap gap-2"><button type="button" onClick={() => run(generateBenchmarkQueries)} disabled={pending || !!library.error || !!library.generationSetup || !!library.definitionSetup || !!library.truthSetup} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">{pending ? "Working…" : "Generate from Truth Hub"}</button><button type="button" aria-expanded={showForm} aria-controls="manual-query-form" onClick={() => setShowForm(value => !value)} disabled={pending || !!library.error || !!library.setup || !!library.definitionSetup || !!library.truthSetup} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{showForm ? "Close form" : "+ Add Query"}</button></div>
+      <div className="flex flex-wrap items-start gap-2"><BenchmarkRunner/><button type="button" onClick={() => run(generateLocalQueries)} disabled={pending} className="rounded-lg border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50">{pending ? "Working…" : "Generate from Truth Hub"}</button><button type="button" aria-expanded={showForm} aria-controls="manual-query-form" onClick={() => setShowForm(value => !value)} disabled={pending} className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{showForm ? "Close form" : "+ Add Query"}</button></div>
     </div>
 
     <SectionCard>
@@ -102,7 +173,7 @@ export function QueryLibraryView({ library }: { library: QueryLibrary }) {
       </div>
     </SectionCard>
 
-    {showForm && <form id="manual-query-form" className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 lg:grid-cols-2" onSubmit={event => { event.preventDefault(); run(() => createBenchmarkQuery({ ...form, location: form.location.trim() || null }, evaluation), () => { setForm(emptyForm); setEvaluation({ dimensions: ["visibility"], fact_ids: [] }); setShowForm(false); }); }}>
+    {showForm && <form id="manual-query-form" className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 lg:grid-cols-2" onSubmit={event => { event.preventDefault(); run(() => createLocalQuery({ ...form, location: form.location.trim() || null }, evaluation), () => { setForm(emptyForm); setEvaluation({ dimensions: ["visibility"], fact_ids: [] }); setShowForm(false); }); }}>
       <div className="lg:col-span-2"><h3 className="font-semibold text-slate-900">Add a benchmark query</h3><p className="mt-1 text-xs text-slate-500">Use this for an important customer scenario that is not covered by the generated set.</p></div>
       <label className="lg:col-span-2"><span className="mb-1.5 block text-xs font-semibold text-slate-700">Customer question</span><textarea required minLength={10} maxLength={500} value={form.query_text} onChange={event => setForm({ ...form, query_text: event.target.value })} rows={3} placeholder="What would a real customer ask an AI assistant?" className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500"/></label>
       <FormSelect label="Category" value={form.category} values={[...queryCategories]} onChange={value => setForm({ ...form, category: value as typeof form.category })}/>
@@ -137,7 +208,7 @@ export function QueryLibraryView({ library }: { library: QueryLibrary }) {
             <span className="flex items-center gap-4 text-xs text-slate-500"><span>{unready ? `${unready} need attention` : active.length ? "Coverage ready" : "No active coverage"}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span></span>
           </button>
           {expanded && <div id={`category-${queryCategories.indexOf(category)}`} className="border-t border-slate-100 bg-slate-50/50 p-4">
-            {matching.length ? <div className="space-y-3">{matching.map(query => <QueryCard key={query.id} query={query} library={library} pending={pending} run={run}/>)}</div> : <p className="p-4 text-sm text-slate-500">{all.length ? "No queries match these filters." : "No benchmarks in this category yet."}</p>}
+            {matching.length ? <div className="space-y-3">{matching.map(query => <QueryCard key={query.id} query={query} library={library} pending={pending} run={run} setActive={setLocalActive} saveEvaluation={saveLocalEvaluation}/>)}</div> : <p className="p-4 text-sm text-slate-500">{all.length ? "No queries match these filters." : "No benchmarks in this category yet."}</p>}
           </div>}
         </section>;
       })}</div>
@@ -146,18 +217,18 @@ export function QueryLibraryView({ library }: { library: QueryLibrary }) {
   </main>;
 }
 
-function QueryCard({ query, library, pending, run }: { query: SavedQuery; library: QueryLibrary; pending: boolean; run: (action: () => Promise<{ error?: string; message?: string }>) => void }) {
+function QueryCard({ query, library, pending, run, setActive, saveEvaluation }: { query: SavedQuery; library: QueryLibrary; pending: boolean; run: (action: () => Promise<{ error?: string; message?: string }>) => void; setActive: (id: string, active: boolean) => Promise<{ error?: string; message?: string }>; saveEvaluation: (id: string, selection: unknown) => Promise<{ error?: string; message?: string }> }) {
   const latest = query.results[0];
   const status = readiness(query);
   const dimensions = query.evaluation_dimensions ?? [];
   return <article className="rounded-lg border border-slate-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="text-sm font-semibold leading-6 text-slate-900">{query.query_text}</h3><p className="mt-1 text-xs text-slate-500">{query.category} · {query.audience}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${status.style}`}>{status.label}</span></div>
     <div className="mt-3 flex flex-wrap gap-1.5">{dimensions.map(dimension => <span key={dimension} className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{dimensionLabels[dimension]}</span>)}{!dimensions.length && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">Measurements not defined</span>}</div>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500"><span>{latest ? `${latest.mentioned ? "Mentioned" : "Not mentioned"} · Last tested ${date(latest.tested_at)}` : "Not tested yet"}</span><button type="button" onClick={() => run(() => setBenchmarkQueryActive(query.id, !query.is_active))} disabled={pending || !!library.setup} className="font-semibold text-blue-700 disabled:opacity-50">{query.is_active ? "Deactivate" : "Activate"}</button></div>
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">{latest ? <span>{latest.mentioned ? "Mentioned" : "Not mentioned"} · Last tested {date(latest.tested_at)}</span> : <span/>}<button type="button" onClick={() => run(() => setActive(query.id, !query.is_active))} disabled={pending} className="font-semibold text-blue-700 disabled:opacity-50">{query.is_active ? "Deactivate" : "Activate"}</button></div>
     <details className="mt-3 text-xs text-slate-600"><summary className="cursor-pointer font-semibold text-blue-700">Query details</summary><div className="mt-3 space-y-5 border-t border-slate-100 pt-4">
-      <BenchmarkDefinition key={`${query.id}:${query.updated_at}:${JSON.stringify(query.truth_links)}`} query={query} facts={library.truthFacts} unavailable={library.definitionSetup || library.truthSetup} pending={pending} onSave={value => run(() => saveBenchmarkEvaluation(query.id, value))}/>
-      <section><h4 className="mb-3 font-semibold text-slate-900">Latest result</h4>{library.resultsSetup ? <p>Results unavailable</p> : latest ? <ResultDetails result={latest} /> : <p>Not tested yet</p>}</section>
-      {query.results.length > 1 && <details><summary className="cursor-pointer font-semibold text-blue-700">Earlier result history ({query.results.length - 1})</summary><div className="mt-3 space-y-3">{query.results.slice(1).map(result => <ResultDetails key={result.id} result={result} />)}</div></details>}
+      <BenchmarkDefinition key={`${query.id}:${query.updated_at}:${JSON.stringify(query.truth_links)}`} query={query} facts={library.truthFacts} pending={pending} onSave={value => run(() => saveEvaluation(query.id, value))}/>
+      {latest && <section><h4 className="mb-3 font-semibold text-slate-900">Latest result</h4><ResultDetails query={query} result={latest} /></section>}
+      {query.results.length > 1 && <details><summary className="cursor-pointer font-semibold text-blue-700">Earlier result history ({query.results.length - 1})</summary><div className="mt-3 space-y-3">{query.results.slice(1).map(result => <ResultDetails key={result.id} query={query} result={result} />)}</div></details>}
     </div></details>
   </article>;
 }
@@ -174,6 +245,10 @@ function FormSelect({ label, value, values, onChange }: { label: string; value: 
   return <label><span className="mb-1.5 block text-xs font-semibold text-slate-700">{label}</span><select value={value} onChange={event => onChange(event.target.value)} className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-500">{values.map(item => <option key={item}>{item}</option>)}</select></label>;
 }
 
-function ResultDetails({ result }: { result: QueryResult }) {
-  return <div className="rounded-lg bg-slate-50 p-3"><p className="mb-3 text-slate-500">{result.ai_platform} · {date(result.tested_at)}</p><dl className="grid gap-3 sm:grid-cols-3">{Object.entries({ Mentioned: result.mentioned ? "Yes" : "No", "Recommendation position": result.recommendation_position ?? "—", "Claims checked": result.claims_checked, "Claims verified": result.verified_claims, Conflicts: result.conflict_count }).map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd className="mt-1">{value}</dd></div>)}</dl></div>;
+function ResultDetails({ query, result }: { query: SavedQuery; result: QueryResult }) {
+  const values: [string, string | number][] = [["Mentioned", result.mentioned ? "Yes" : "No"]];
+  if (showsRecommendation(query)) values.push(["Recommended", result.recommended ? "Yes" : "No"]);
+  if (showsPosition(query)) values.push(["Recommendation position", result.recommendation_position ?? "—"]);
+  values.push(["Claims checked", result.claims_checked], ["Claims verified", result.verified_claims], ["Conflicts", result.conflict_count]);
+  return <div className="rounded-lg bg-slate-50 p-3"><p className="mb-3 text-slate-500">{result.ai_platform} · {date(result.tested_at)}</p><dl className="grid gap-3 sm:grid-cols-3">{values.map(([label, value]) => <div key={label}><dt className="font-semibold">{label}</dt><dd className="mt-1">{value}</dd></div>)}</dl></div>;
 }

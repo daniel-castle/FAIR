@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { offeringFields, type BusinessTemplate, type TemplateField } from "@/data/business-templates";
 import { fieldValue, findFact, friendlyValue, hasValue, objectValue, readField, type FieldValue } from "@/lib/truth-fields";
 import { verified, type HubData, type Row } from "@/lib/truth-hub";
-import { saveGuidedField, saveGuidedOffering } from "@/app/truth-hub/actions";
 import { SectionCard, StatusBadge } from "@/components/ui";
 import { TypedInput, inputStyle } from "./typed-input";
 
@@ -27,7 +26,10 @@ export function FieldGroups({ data, template, offering, onEdit, disabled }: { da
     })}</div></SectionCard>;
   })}</div>;
 }
-export function GuidedFieldEditor({ field, data, template, offeringId, close, saved }: { field: TemplateField; data: HubData; template: BusinessTemplate; offeringId?: string; close: () => void; saved: () => Promise<void> }) {
+type SaveField = (input: { templateId: string; key: string; value: unknown; offeringId?: string; verified: boolean; custom?: boolean }) => Promise<{ error?: string }>;
+type SaveOffering = (input: { templateId: string; id?: string; name: string; type: string; description: string; values: Record<string, unknown>; verified: boolean }) => Promise<{ error?: string; row?: Row }>;
+
+export function GuidedFieldEditor({ field, data, template, offeringId, close, saved, saveField }: { field: TemplateField; data: HubData; template: BusinessTemplate; offeringId?: string; close: () => void; saved: () => Promise<void>; saveField: SaveField }) {
   const existing = findFact(data.facts, field, offeringId);
   const initial = readField(data.facts, field, data.business, offeringId);
   const [value, setValue] = useState<FieldValue>(() => fieldValue(field, initial));
@@ -41,7 +43,7 @@ export function GuidedFieldEditor({ field, data, template, offeringId, close, sa
   return <Modal title={`Edit ${field.label}`} close={close} busy={busy}><form className="space-y-5" onSubmit={async e => {
     e.preventDefault(); setBusy(true); setError("");
     try {
-      const result = await saveGuidedField({ templateId: template.id, key: field.key, value: custom ? customText : value, offeringId, verified: checked, custom });
+      const result = await saveField({ templateId: template.id, key: field.key, value: custom ? customText : value, offeringId, verified: checked, custom });
       if (result.error) { setError(result.error); return; }
       await saved(); close();
     } catch { setError("Could not confirm the save. Reload before trying again."); } finally { setBusy(false); }
@@ -55,7 +57,7 @@ export function GuidedFieldEditor({ field, data, template, offeringId, close, sa
     <div className="flex justify-end gap-2"><button type="button" className={button} onClick={close}>Cancel</button><button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{busy ? "Saving…" : "Save changes"}</button></div>
   </fieldset></form></Modal>;
 }
-export function OfferingEditor({ template, data, offering, close, saved }: { template: BusinessTemplate; data: HubData; offering?: Row; close: () => void; saved: () => Promise<void> }) {
+export function OfferingEditor({ template, data, offering, close, saved, saveOffering }: { template: BusinessTemplate; data: HubData; offering?: Row; close: () => void; saved: () => Promise<void>; saveOffering: SaveOffering }) {
   const [id, setId] = useState(offering?.id);
   const [type, setType] = useState(String(offering?.offering_type ?? (template.id === "retail" ? "product" : template.id === "restaurant" ? "menu_item" : "service")));
   const [name, setName] = useState(String(offering?.name ?? ""));
@@ -69,7 +71,7 @@ export function OfferingEditor({ template, data, offering, close, saved }: { tem
     e.preventDefault(); setBusy(true); setError("");
     try {
       const values = Object.fromEntries(Object.entries(changes).filter(([key]) => fields.some(f => f.key === key)));
-      const result = await saveGuidedOffering({ templateId: template.id, id, name, type, description, values, verified: checked });
+      const result = await saveOffering({ templateId: template.id, id, name, type, description, values, verified: checked });
       if (result.row) setId(result.row.id);
       if (result.error) { setError(result.error); if (result.row) await saved(); return; }
       await saved(); close();

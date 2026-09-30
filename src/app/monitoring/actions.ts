@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { loadTruthHub } from "@/app/truth-hub/actions";
 import { createSupabaseClient } from "@/lib/supabase/server";
@@ -137,5 +138,72 @@ export async function runMonitoringScan(): Promise<ScanActionResult> {
     if (runId) await db.from("monitoring_runs").update({ status: "failed", completed_at: new Date().toISOString(), error_message: "The scan stopped before all selected queries were completed." }).eq("id", runId);
     revalidatePath("/metrics");
     return { runId, error: "The scan stopped before completion. Saved raw responses and evidence remain available for inspection." };
+  }
+}
+
+const localFactSchema = z.object({
+  id: z.uuid(), key: z.string().min(1).max(200), offering: z.string().max(200).nullable(),
+  value: z.string().max(20000), verified: z.boolean(),
+}).strict();
+const localQuerySchema = z.object({
+  id: z.uuid(), query_text: z.string().min(10).max(500), category: z.string().min(1).max(120),
+  audience: z.string().min(1).max(120), evaluation_dimensions: z.array(z.enum(["visibility", "recommendation", "recommendation_position", "factual_accuracy", "competitor_presence"])).max(5),
+  linked_facts: z.array(localFactSchema).max(100),
+}).strict();
+const localScanSchema = z.object({
+  business: z.object({ id: z.uuid(), name: z.string().min(1).max(200), aliases: z.array(z.string().min(1).max(200)).max(20) }).strict(),
+  queries: z.array(localQuerySchema).min(1).max(MAX_QUERIES_PER_RUN),
+}).strict();
+
+export async function runWorkspaceMonitoringScan(snapshot: unknown) {
+  const parsed = localScanSchema.safeParse(snapshot);
+  if (!parsed.success) return { error: "The browser monitoring snapshot is invalid." };
+  if (!process.env.OPENAI_API_KEY) return { error: "Set OPENAI_API_KEY in the server environment before running a scan." };
+
+  const startedAt = new Date().toISOString();
+  const runId = crypto.randomUUID();
+  const aliases = identityAliases(parsed.data.business.name, parsed.data.business.aliases);
+  const results = [];
+  const allClaims = [];
+  try {
+    for (const query of parsed.data.queries) {
+      const rawResponse = await requestMonitoredAnswer(query.query_text);
+      const resultId = crypto.randomUUID();
+      const testedAt = new Date().toISOString();
+      const evidence = evaluateMonitoredResponse({
+        rawResponse,
+        businessName: parsed.data.business.name,
+        aliases,
+        linkedFacts: query.linked_facts,
+        evaluateFacts: query.evaluation_dimensions.includes("factual_accuracy"),
+      });
+      const claims = evidence.claims.map(claim => ({
+        id: crypto.randomUUID(), result_id: resultId, fact_id: claim.fact_id,
+        subject: claim.subject, offering: claim.offering, fact_key: claim.fact_key,
+        observed_value: claim.value, canonical_value_snapshot: claim.canonical_value_snapshot,
+        verification_status: claim.verification_status, evidence_text: claim.evidence_text, created_at: testedAt,
+      }));
+      const checked = claims.filter(claim => claim.verification_status !== "needs_review");
+      const verified = checked.filter(claim => claim.verification_status === "verified").length;
+      const conflicts = checked.filter(claim => claim.verification_status === "conflict").length;
+      allClaims.push(...claims);
+      results.push({
+        id: resultId, monitoring_run_id: runId, query_id: query.id, business_id: parsed.data.business.id,
+        provider: MONITORING_PROVIDER, model: MONITORING_MODEL, tested_at: testedAt, raw_response_text: rawResponse,
+        mentioned: evidence.mentioned, recommended: evidence.recommended, recommendation_position: evidence.recommendation_position,
+        mentioned_businesses: evidence.mentioned_businesses, claims_checked: checked.length, verified_claims: verified,
+        conflict_count: conflicts, query_text: query.query_text, category: query.category, audience: query.audience, claims,
+      });
+    }
+    const completedAt = new Date().toISOString();
+    return {
+      run: { id: runId, business_id: parsed.data.business.id, status: "completed" as const, started_at: startedAt, completed_at: completedAt, query_count: results.length, provider: MONITORING_PROVIDER, model: MONITORING_MODEL, error_message: null },
+      results,
+      claims: allClaims,
+      message: `Scan complete. ${results.length} active benchmark queries were tested.`,
+    };
+  } catch (caught) {
+    console.error("Workspace monitoring scan failed:", benchmarkErrorDetails(caught));
+    return { error: "The scan stopped before completion. Existing browser workspace history was not changed." };
   }
 }
