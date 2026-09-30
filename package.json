@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "check:monitoring": "node scripts/check-monitoring-architecture.cjs",
     "start": "next start",
     "lint": "eslint"
   },

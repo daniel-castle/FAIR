@@ -5,9 +5,9 @@ import { Icon, type IconName } from "@/components/icons";
 
 const groups = [
   { label: "Overview", items: [{ label: "Overview", href: "/", icon: "grid" as IconName }] },
-  { label: "Monitor", items: [{ label: "AI Monitor", href: "/monitoring", icon: "pulse" as IconName }, { label: "Queries", href: "/queries", icon: "search" as IconName }] },
-  { label: "Truth", items: [{ label: "Truth Hub", href: "/truth-hub", icon: "database" as IconName }, { label: "Issues", href: "/issues", icon: "alert" as IconName }] },
-  { label: "Improve", items: [{ label: "Insights", href: "/insights", icon: "spark" as IconName }, { label: "Human Review", href: "/human-review", icon: "review" as IconName }] },
+  { label: "Truth", items: [{ label: "Truth Hub", href: "/truth-hub", icon: "database" as IconName }] },
+  { label: "Measure", items: [{ label: "Queries", href: "/queries", icon: "search" as IconName }, { label: "Metrics", href: "/metrics", icon: "pulse" as IconName }] },
+  { label: "Improve", items: [{ label: "Issues", href: "/issues", icon: "alert" as IconName }, { label: "Insights", href: "/insights", icon: "spark" as IconName }, { label: "Human Review", href: "/human-review", icon: "review" as IconName }] },
 ];
 
 export function Navigation() {
